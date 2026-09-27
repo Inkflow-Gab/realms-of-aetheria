@@ -134,9 +134,16 @@ export class UIComponents {
         container.add(bg);
 
         if (item) {
-            const icon = scene.add.image(0, 0, item.icon || 'items/default');
-            icon.setDisplaySize(size - 8, size - 8);
-            container.add(icon);
+            // Only draw an icon if its texture actually resolved. There is no
+            // 'items/default' texture in the pack, so the old fallback asked
+            // for a key that does not exist and rendered Phaser's green
+            // missing-image box over the slot. An empty slot is better.
+            const iconKey = item.icon;
+            if (iconKey && scene.textures.exists(iconKey)) {
+                const icon = scene.add.image(0, 0, iconKey);
+                icon.setDisplaySize(size - 8, size - 8);
+                container.add(icon);
+            }
 
             if (count > 1) {
                 const countText = scene.add.text(size / 2 - 4, size / 2 - 4, count.toString(), {

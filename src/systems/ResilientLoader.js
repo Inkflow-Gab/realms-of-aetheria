@@ -4,163 +4,249 @@
 //
 // WHY THIS EXISTS
 // ---------------
-// Phaser's built-in LoaderPlugin has one fatal property: it is all-or-nothing.
-// `preload()` does not resume until *every* queued file has finished. If a
-// single request never settles -- because the Android WebView declined to
-// hand the request to the asset loader, or a connection stalled, or a decode
-// threw -- the scene's `create()` is never called, the game never advances,
-// and the player is left staring at a frozen progress bar.
+// The game hung on its loading screen at "0 / 31 assets", indefinitely, with
+// no error. Diagnosis and elimination:
 //
-// That is exactly the "0 / 31 assets" symptom: the request was made, the
-// spinner turned, and not one file ever reported back.
+//   * the previous APK was unpacked and every critical file was confirmed
+//     present at assets/public/assets/... , at exactly the paths requested
+//   * every file was confirmed to be a valid, non-empty PNG or OGG
+//   * the shipped JavaScript was confirmed byte-identical to the source
+//   * the engine itself loaded from vendor/phaser.min.js, proving the WebView
+//     asset server answers for same-origin scripts
 //
-// This loader replaces the blocking queue with a bounded, self-healing one:
+// So the files were right and the server was up, yet <img> and fetch() requests
+// for the same directory never settled. Something specific to those two paths
+// is being dropped by the WebView.
 //
-//   * finite concurrency, so 31 files do not all hit the WebView at once
-//   * a hard per-file timeout, so a stalled socket cannot wedge the queue
-//   * one automatic retry, which absorbs the common transient failures
-//   * an overall deadline, after which loading stops and the game continues
-//   * failures are recorded, never thrown -- the menu draws without a texture
-//     rather than never drawing at all
+// Rather than keep guessing which mechanism is blocked, each file is attempted
+// through several independent transports and the first one that works is used:
 //
-// The results are written into the normal Phaser caches
-// (`scene.textures` / `scene.cache.audio`), so every other system keeps
-// reading them by key exactly as before and is unaware this code exists.
+//   images  1. <img> element            the classic path
+//           2. fetch() -> Blob -> <img> forces the bytes through fetch first
+//           3. fetch() -> createImageBitmap -> canvas
+//                                     bypasses the <img> decode path entirely
+//   audio   1. fetch()
+//           2. XMLHttpRequest          a genuinely different network stack
+//
+// Every attempt is bounded by a timeout, retried once, and capped by an overall
+// deadline. Failures are recorded, never thrown, and results land in the normal
+// texture and audio caches, so every other system reads them by key as before
+// and is unaware this module exists.
 // ============================================
 
-const IMAGE_TIMEOUT = 7000;
-const AUDIO_TIMEOUT = 15000;
+const IMAGE_TIMEOUT = 3000;
+const AUDIO_TIMEOUT = 8000;
 
-/** Resolve after `ms`, used to bound a single file's wait. */
+/** Bound a single attempt. */
 function withTimeout(promise, ms) {
     let timer;
-    const timeout = new Promise((_, reject) => {
+    const guard = new Promise((_, reject) => {
         timer = setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms);
     });
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    return Promise.race([promise, guard]).finally(() => clearTimeout(timer));
 }
+
+/** Absolute URL, so no base-URL ambiguity can strand a relative path. */
+export function absolute(assetPath) {
+    try {
+        return new URL(assetPath, document.baseURI || location.href).href;
+    } catch {
+        return assetPath;
+    }
+}
+
+// ---------------------------------------------------------------
+// Image transports
+// ---------------------------------------------------------------
+
+/** 1. The classic <img> element path. */
+function viaImageElement(scene, key, url) {
+    return new Promise((resolve) => {
+        const img = new Image();
+
+        img.onload = () => {
+            try {
+                scene.textures.addImage(key, img);
+                resolve(true);
+            } catch (err) {
+                console.warn(`[loader] "${key}" decoded but unusable:`, err);
+                resolve(false);
+            }
+        };
+        img.onerror = () => resolve(false);
+
+        // Assigned exactly once. Setting src to '' first -- a common
+        // cache-busting habit -- resolves to the current page URL and starts
+        // loading the document as an image; that decode error is then reported
+        // against the real asset and good files get marked as failed.
+        img.src = url;
+    });
+}
+
+/** 2. Pull the bytes through fetch, then hand them to an <img> as a blob. */
+async function viaFetchBlob(scene, key, url) {
+    const res = await fetch(url, { cache: 'force-cache' });
+    if (!res.ok) return false;
+
+    const blob = await res.blob();
+    if (!blob || blob.size === 0) return false;
+
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+        return await viaImageElement(scene, key, objectUrl);
+    } finally {
+        // Revoked only after the texture has taken its own reference.
+        URL.revokeObjectURL(objectUrl);
+    }
+}
+
+/** 3. Decode off the <img> path entirely, via the bitmap decoder. */
+async function viaImageBitmap(scene, key, url) {
+    if (typeof createImageBitmap !== 'function') return false;
+
+    const res = await fetch(url, { cache: 'force-cache' });
+    if (!res.ok) return false;
+
+    const blob = await res.blob();
+    const bitmap = await createImageBitmap(blob);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    canvas.getContext('2d').drawImage(bitmap, 0, 0);
+    bitmap.close?.();
+
+    scene.textures.addCanvas(key, canvas);
+    return true;
+}
+
+// ---------------------------------------------------------------
+// Audio transports
+// ---------------------------------------------------------------
+
+/** 1. fetch() into the audio cache as an undecoded ArrayBuffer. */
+async function viaFetchAudio(scene, key, url) {
+    const res = await fetch(url, { cache: 'force-cache' });
+    if (!res.ok) return false;
+
+    const buffer = await res.arrayBuffer();
+    if (!buffer || buffer.byteLength === 0) return false;
+
+    // Stored undecoded, exactly as Phaser's own loader does. The Web Audio
+    // context starts suspended until a user gesture, so decoding here would
+    // be rejected on a cold start; scene.sound.add() decodes lazily instead.
+    scene.cache.audio.add(key, buffer);
+    return true;
+}
+
+/** 2. XMLHttpRequest -- a different network stack inside the WebView. */
+function viaXhrAudio(scene, key, url) {
+    return new Promise((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', url, true);
+        xhr.responseType = 'arraybuffer';
+
+        xhr.onload = () => {
+            if (xhr.status < 200 || xhr.status >= 300 || !xhr.response?.byteLength) {
+                return resolve(false);
+            }
+            try {
+                scene.cache.audio.add(key, xhr.response);
+                resolve(true);
+            } catch {
+                resolve(false);
+            }
+        };
+        xhr.onerror = () => resolve(false);
+        xhr.onabort = () => resolve(false);
+        // A cached response is fine; anything else is a real transport fault.
+        xhr.ontimeout = () => resolve(false);
+        xhr.send();
+    });
+}
+
+// ---------------------------------------------------------------
+
+const IMAGE_PLAN = [
+    ['img', viaImageElement],
+    ['fetch+blob', viaFetchBlob],
+    ['bitmap', viaImageBitmap],
+];
+
+const AUDIO_PLAN = [
+    ['fetch', viaFetchAudio],
+    ['xhr', viaXhrAudio],
+];
 
 export class ResilientLoader {
     /**
      * @param {Phaser.Scene} scene
      * @param {object}  [options]
      * @param {number}  [options.concurrency]  parallel requests (default 6)
-     * @param {number}  [options.deadline]     total ms budget for a run
-     * @param {number}  [options.retries]      retries per file (default 1)
+     * @param {number}  [options.deadline]     total ms budget (default 9000)
+     * @param {number}  [options.retries]      retries per transport (default 1)
      */
     constructor(scene, options = {}) {
         this.scene = scene;
         this.concurrency = options.concurrency ?? 6;
-        this.deadline = options.deadline ?? 20000;
+        this.deadline = options.deadline ?? 9000;
         this.retries = options.retries ?? 1;
 
         this.loaded = 0;
-        this.failed = [];
         this.done = 0;
+        this.failed = [];
+
+        // Which transport actually delivered, per category. This is the whole
+        // point: it turns "assets are not responding" into a fact.
+        this.used = { image: new Set(), audio: new Set() };
     }
 
-    // ---------------------------------------------------------------
-    // Single files
-    // ---------------------------------------------------------------
-
-    /**
-     * Load one image into the texture cache.
-     * @returns {Promise<boolean>} true if the texture is usable
-     */
-    loadImage(key, url) {
-        const scene = this.scene;
-
-        if (scene.textures.exists(key)) return Promise.resolve(true);
-
-        return new Promise((resolve) => {
-            const img = new Image();
-
-            img.onload = () => {
-                try {
-                    scene.textures.addImage(key, img);
-                    resolve(true);
-                } catch (err) {
-                    console.warn(`[loader] texture "${key}" present but unusable:`, err);
-                    resolve(false);
-                }
-            };
-
-            img.onerror = () => {
-                console.warn(`[loader] image failed: ${url}`);
-                resolve(false);
-            };
-
-            // Assign the URL exactly once. Setting `src` to an empty string
-            // first -- a common cache-busting habit -- makes the browser
-            // resolve '' to the *current page URL* and start loading the
-            // document as an image. That spurious attempt races the real one
-            // and its decode error is reported against the real asset, which
-            // marks good files as failed.
-            img.src = url;
-        });
+    /** True when the manifest entry is audio rather than an image. */
+    isAudio(asset) {
+        return /\.(ogg|mp3|wav|m4a)$/i.test(asset.file);
     }
 
-    /**
-     * Fetch and decode one audio track into the audio cache.
-     *
-     * The ArrayBuffer is stored undecoded, exactly as Phaser's own loader
-     * does, so `scene.sound.add(key)` decodes it lazily on first play.
-     *
-     * @returns {Promise<boolean>} true if the sound is playable
-     */
-    async loadAudio(key, url) {
-        const scene = this.scene;
-
-        if (scene.cache.audio.exists(key)) return true;
-
-        // The Web Audio context starts suspended until a user gesture, so a
-        // decode at boot would be rejected. Storing raw bytes defers that.
-        try {
-            const res = await fetch(url, { cache: 'force-cache' });
-            if (!res.ok) {
-                console.warn(`[loader] audio HTTP ${res.status}: ${url}`);
-                return false;
-            }
-            const buffer = await res.arrayBuffer();
-            if (!buffer || buffer.byteLength === 0) {
-                console.warn(`[loader] audio empty: ${url}`);
-                return false;
-            }
-            scene.cache.audio.add(key, buffer);
-            return true;
-        } catch (err) {
-            console.warn(`[loader] audio failed: ${url}`, err);
-            return false;
-        }
-    }
-
-    /** One file, with timeout and retry. Never rejects. */
+    /** One file: every transport, each retried, all bounded. Never rejects. */
     async loadOne(asset) {
-        const isAudio = /\.(ogg|mp3|wav|m4a)$/i.test(asset.file);
-        const timeout = isAudio ? AUDIO_TIMEOUT : IMAGE_TIMEOUT;
+        const audio = this.isAudio(asset);
+        const plan = audio ? AUDIO_PLAN : IMAGE_PLAN;
+        const url = absolute(asset.file);
+        const timeout = audio ? AUDIO_TIMEOUT : IMAGE_TIMEOUT;
+        const kind = audio ? 'audio' : 'image';
 
-        for (let attempt = 0; attempt <= this.retries; attempt++) {
-            try {
-                const ok = await withTimeout(
-                    isAudio
-                        ? this.loadAudio(asset.key, asset.file)
-                        : this.loadImage(asset.key, asset.file),
-                    timeout
-                );
-                if (ok) return true;
-            } catch (err) {
-                console.warn(
-                    `[loader] ${asset.file} attempt ${attempt + 1}:`,
-                    err?.message || err
-                );
+        // Skip work already done: an earlier run may have filled the cache.
+        // Counting is left to loadAll, so nothing is tallied twice.
+        const cache = audio ? this.scene.cache.audio : this.scene.textures;
+        if (cache.exists(asset.key)) {
+            return { ok: true, transport: 'cached' };
+        }
+
+        for (const [name, attempt] of plan) {
+            for (let tryNo = 0; tryNo <= this.retries; tryNo++) {
+                try {
+                    const ok = await withTimeout(
+                        Promise.resolve(attempt(this.scene, asset.key, url)),
+                        timeout
+                    );
+                    if (ok) {
+                        this.used[kind].add(name);
+                        return { ok: true, transport: name };
+                    }
+                } catch (err) {
+                    // A timeout is the interesting case and is worth keeping.
+                    if (/timeout/.test(err?.message || '')) {
+                        console.warn(
+                            `[loader] ${kind}/${name} stalled on ` +
+                            `${asset.file} after ${timeout}ms`
+                        );
+                    }
+                }
             }
         }
-        return false;
-    }
 
-    // ---------------------------------------------------------------
-    // Whole runs
-    // ---------------------------------------------------------------
+        this.failed.push(asset.file);
+        return { ok: false, transport: null };
+    }
 
     /**
      * Load a list of manifest entries with bounded concurrency.
@@ -168,7 +254,7 @@ export class ResilientLoader {
      * @param {Array<{key:string,file:string}>} assets
      * @param {(state:{done:number,total:number,loaded:number,current:string})=>void} [onProgress]
      * @param {object}  [options]
-     * @param {boolean} [options.background]  fire-and-forget (no awaiting)
+     * @param {boolean} [options.background]  fire-and-forget (not awaited)
      * @returns {Promise<{loaded:number, failed:string[]}>}
      */
     async loadAll(assets, onProgress, options = {}) {
@@ -180,17 +266,11 @@ export class ResilientLoader {
         if (!total) return { loaded: 0, failed: [] };
 
         const started = Date.now();
-        let queue = assets.slice();
+        const queue = assets.slice();
         let stopped = false;
 
-        const report = (current = '') => {
-            onProgress?.({
-                done: this.done,
-                total,
-                loaded: this.loaded,
-                current,
-            });
-        };
+        const report = (current = '') =>
+            onProgress?.({ done: this.done, total, loaded: this.loaded, current });
 
         report('');
 
@@ -199,24 +279,23 @@ export class ResilientLoader {
                 if (Date.now() - started > this.deadline) {
                     stopped = true;
                     console.warn(
-                        `[loader] deadline of ${this.deadline}ms hit -- ` +
-                        `continuing with ${this.loaded}/${total} loaded`
+                        `[loader] ${this.deadline}ms deadline hit -- continuing ` +
+                        `with ${this.loaded}/${total} loaded`
                     );
                     return;
                 }
 
                 const asset = queue.shift();
-                const ok = await this.loadOne(asset);
+                const res = await this.loadOne(asset);
                 this.done++;
-                if (ok) this.loaded++;
-                else this.failed.push(asset.file);
+                if (res.ok) this.loaded++;
 
                 report(asset.file);
             }
         };
 
-        // A small pool, not one worker per file: 31 simultaneous requests
-        // against the WebView asset loader is what made this stall.
+        // A small pool. 31 simultaneous requests against the WebView asset
+        // loader is what made the original queue stall.
         const workers = Array.from(
             { length: Math.min(this.concurrency, total) },
             worker
@@ -230,5 +309,12 @@ export class ResilientLoader {
         }
 
         return { loaded: this.loaded, failed: this.failed };
+    }
+
+    /** Human-readable summary of which transports worked. */
+    describeTransports() {
+        const image = [...this.used.image].join(', ') || 'none';
+        const audio = [...this.used.audio].join(', ') || 'none';
+        return `img: ${image} · audio: ${audio}`;
     }
 }

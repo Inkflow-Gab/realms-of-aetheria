@@ -2,32 +2,43 @@
 // REALMS OF AETHERIA - PRELOAD SCENE
 // ============================================
 //
-// The critical assets are loaded through ResilientLoader rather than Phaser's
-// built-in loader. Phaser's queue is all-or-nothing: one request that never
-// settles blocks `create()` forever, which is what produced the frozen
-// "0 / 31 assets" screen. The resilient loader bounds every wait, retries
-// once, and always hands control on to the main menu.
+// Assets are loaded through ResilientLoader, not Phaser's loader, because
+// Phaser's queue is all-or-nothing: one request that never settles blocks
+// `create()` forever and the game is stuck on the loading screen with no error
+// and no progress. The resilient loader bounds every wait and always hands
+// control on.
 //
-// Nothing in here is allowed to throw. A missing texture degrades to the dark
+// Two rules govern this scene:
+//
+//   1. The main menu renders with zero assets -- its buttons are drawn with
+//      graphics, not textures -- so a total asset failure must still leave the
+//      player with a playable menu. Hence the short deadline: we wait briefly
+//      for the nice-looking path, then start the game regardless.
+//   2. Whatever happens is reported on the loading screen, not only in logcat.
+//      A screenshot should be enough to tell what the device is doing.
+//
+// Nothing here is allowed to throw. A missing texture degrades to the dark
 // backdrop; a missing sound is silent. The game always starts.
 // ============================================
 
 import { getCriticalAssets, getDeferredAssets } from '../data/AssetManifest.js';
-import { ResilientLoader } from '../systems/ResilientLoader.js';
+import { ResilientLoader, absolute } from '../systems/ResilientLoader.js';
+
+/** How long we wait for critical assets before starting the game regardless. */
+const CRITICAL_DEADLINE = 8000;
 
 export class PreloadScene extends Phaser.Scene {
     constructor() {
         super({ key: 'Preload' });
-        this.failedFiles = [];
     }
 
     // No `preload()` on purpose.
     //
-    // Assets are loaded in `create()` by ResilientLoader, because that is the
-    // only way to bound the wait. Phaser's own loader is left with an empty
-    // queue, so the preload phase finishes instantly and hands straight over.
-    // (Phaser 3.80 has no `LoaderPlugin.skip()`; calling a method that does
-    // not exist here would throw inside the scene boot and hang the game.)
+    // Assets are loaded in `create()` so every wait can be bounded. Phaser's
+    // loader is left with an empty queue, so the preload phase finishes
+    // instantly and hands straight over. (Phaser 3.80 has no
+    // `LoaderPlugin.skip()`; calling a method that does not exist throws during
+    // scene boot and hangs the game all over again.)
 
     async create() {
         const critical = getCriticalAssets();
@@ -35,17 +46,29 @@ export class PreloadScene extends Phaser.Scene {
 
         window.setLoadingMessage?.(1, 'Loading game assets...');
 
+        // ---------------------------------------------------------------
+        // Probe
+        // ---------------------------------------------------------------
+        // One small file, one short attempt, purely to learn whether this
+        // device can fetch assets at all. Its result is shown immediately, so
+        // a failing device says why within a second instead of stalling.
+        const probe = await this.probe();
+        if (probe) window.reportDiag?.(probe);
+
+        // ---------------------------------------------------------------
+        // Critical assets
+        // ---------------------------------------------------------------
         const loader = new ResilientLoader(this, {
             concurrency: 6,
-            deadline: 18000,
+            deadline: CRITICAL_DEADLINE,
             retries: 1,
         });
 
         const result = await loader.loadAll(
             critical,
             ({ done, loaded, current }) => {
-                // Progress is measured against the critical set, so the bar
-                // genuinely reaches 100% when the menu can be drawn.
+                // Measured against the critical set, so the bar genuinely
+                // reaches 100% at the moment the menu can be drawn.
                 const percent = 2 + (done / total) * 96;
                 window.updateLoading?.(percent, describe(current, done, total), {
                     loaded,
@@ -54,29 +77,82 @@ export class PreloadScene extends Phaser.Scene {
             }
         );
 
-        this.failedFiles = result.failed;
+        // The transport summary is the useful fact: it separates "the WebView
+        // is refusing every mechanism" from "one transport is blocked".
+        const summary =
+            `probe: ${probe || 'skipped'} · ${loader.describeTransports()}`;
 
-        if (this.failedFiles.length) {
-            // Surfaced on screen, not just the console: this is the line that
-            // tells us *why* assets are missing if it happens on a device.
-            window.reportDiag?.(
-                `${result.loaded}/${total} loaded · ` +
-                `${this.failedFiles.length} failed: ` +
-                this.failedFiles.slice(0, 3).map(prettyName).join(', ')
-            );
-        } else {
-            window.reportDiag?.(`${result.loaded}/${total} assets ready`);
+        window.reportDiag?.(
+            result.failed.length
+                ? `${result.loaded}/${total} loaded · ${summary}`
+                : `${result.loaded}/${total} assets ready · ${summary}`
+        );
+
+        if (result.failed.length) {
+            console.warn('[preload] unavailable assets:', result.failed);
         }
 
-        window.updateLoading?.(100, 'Ready!', {
-            loaded: result.loaded,
-            total,
-        });
+        window.updateLoading?.(100, 'Ready!', { loaded: result.loaded, total });
 
-        // Hand off, then keep the remaining sprites and 22MB of audio loading
-        // behind the menu so it appears immediately and stays interactive.
+        // Start the game. The menu is fully playable without any texture, so
+        // whatever did or did not load, the player is never stuck here.
         this.scene.start('MainMenu');
         this.loadDeferredAssets(loader);
+    }
+
+    /**
+     * Try to fetch one tiny asset and report which transport worked.
+     * @returns {Promise<string|null>} short human-readable result
+     */
+    async probe() {
+        const scene = this;
+        const url = absolute('assets/hud/life-box.png');
+        if (!url) return null;
+
+        const attempt = (name, fn, ms) => new Promise((resolve) => {
+            const timer = setTimeout(() => resolve(`${name}=timeout`), ms);
+            Promise.resolve()
+                .then(fn)
+                .then((ok) => {
+                    clearTimeout(timer);
+                    resolve(`${name}=${ok ? 'ok' : 'fail'}`);
+                })
+                .catch((err) => {
+                    clearTimeout(timer);
+                    resolve(`${name}=${err?.name === 'AbortError' ? 'timeout' : 'fail'}`);
+                });
+        });
+
+        // Deliberately short: this is a diagnostic, not real work.
+        const viaImg = attempt('img', () => new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(true);
+            img.onerror = () => resolve(false);
+            img.src = url;
+        }), 2500);
+
+        const viaFetch = attempt('fetch', async () => {
+            const res = await fetch(url, { cache: 'force-cache' });
+            if (!res.ok) return false;
+            return (await res.blob()).size > 0;
+        }, 2500);
+
+        const results = await Promise.all([viaImg, viaFetch]);
+
+        if (scene.textures.exists('probe_img')) scene.textures.remove('probe_img');
+
+        // All timeouts means the asset pipeline is blocked, not merely slow.
+        if (results.every((r) => r.includes('timeout'))) {
+            window.showLoadingError?.(
+                'This device is not returning any game assets. Reinstalling ' +
+                'usually fixes it; if not, the APK data is damaged.'
+            );
+            return 'ASSETS BLOCKED (' + results.join(' ') + ')';
+        }
+        if (results.every((r) => r.includes('fail'))) {
+            return 'ASSETS MISSING (files not found in bundle)';
+        }
+        return results.join(' ');
     }
 
     /**
@@ -95,9 +171,11 @@ export class PreloadScene extends Phaser.Scene {
         loader.deadline = 120000;
         loader.retries = 0;
 
-        loader.loadAll(deferred, undefined, { background: true }).then(({ failed }) => {
+        loader.loadAll(deferred, undefined, { background: true }).then(({ loaded, failed }) => {
             if (failed.length) {
-                console.warn(`[deferred] ${failed.length} unavailable:`, failed);
+                console.warn(`[deferred] ${loaded} ok, ${failed.length} unavailable:`, failed);
+            } else {
+                console.info(`[deferred] all ${loaded} assets ready`);
             }
         });
     }

@@ -38,8 +38,16 @@ const server = http.createServer((req, res) => {
 });
 
 // ---------------------------------------------------------------
-// Mock browser + Phaser surface
+// Mock browser surface
 // ---------------------------------------------------------------
+// `imgFails` simulates the reported device behaviour: direct network <img>
+// loads are refused while fetch still works, so the loader has to route around
+// them. It deliberately does NOT block blob: URLs -- those never touch the
+// network stack, which is the whole reason that fallback exists.
+let imgFails = false;
+
+const nativeFetch = global.fetch;
+
 // Faithful enough to catch the `img.src = ''` class of bug: an empty src
 // resolves to the page URL and fails to decode, exactly as a browser does.
 global.Image = class {
@@ -54,13 +62,36 @@ global.Image = class {
             setTimeout(() => this.onerror && this.onerror(), 0);
             return;
         }
-        fetch(v)
+        const settle = () => setTimeout(() => this.onload && this.onload(), 0);
+        const fail = () => setTimeout(() => this.onerror && this.onerror(), 0);
+        if (imgFails && !v.startsWith('blob:')) return fail();
+        nativeFetch(v)
             .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`))))
-            .then(() => setTimeout(() => this.onload && this.onload(), 0))
-            .catch(() => setTimeout(() => this.onerror && this.onerror(), 0));
+            .then(settle)
+            .catch(fail);
     }
     get src() { return this._src; }
 };
+
+// Minimal XHR built on the *native* fetch, so test 8 can block global fetch
+// and prove the XHR transport is genuinely independent of it.
+global.XMLHttpRequest = class {
+    open(_method, url) { this.url = url; this.status = 0; this.response = null; }
+    set responseType(_t) { /* arraybuffer only */ }
+    send() {
+        nativeFetch(this.url)
+            .then(async (r) => {
+                this.status = r.status;
+                this.response = await r.arrayBuffer();
+            })
+            .then(() => this.onload && this.onload())
+            .catch(() => this.onerror && this.onerror());
+    }
+};
+
+// createImageBitmap is deliberately left undefined: the bitmap transport must
+// degrade gracefully when the WebView lacks it, which is part of what is tested.
+
 
 const textures = new Map();
 const audio = new Map();
@@ -184,6 +215,73 @@ const scene = {
     const bgElapsed = Date.now() - t4;
     check('background call does not block', bgElapsed < 200, `took ${bgElapsed}ms`);
     check('deferred set is non-trivial', deferred.length === 40, `n=${deferred.length}`);
+
+    // ===============================================================
+    console.log('\n[6] Falls back to another transport when <img> is blocked');
+    // ===============================================================
+    // This is the reported failure mode: the device refuses the <img> path.
+    // The loader must still deliver the asset through fetch rather than
+    // calling it missing.
+    imgFails = true;
+    const fbTextures = new Map();
+    const fbScene = {
+        textures: {
+            exists: (k) => fbTextures.has(k),
+            addImage: (k, img) => fbTextures.set(k, img),
+            addCanvas: (k, c) => fbTextures.set(k, c),
+        },
+        cache: { audio: { exists: () => false, add: () => true } },
+    };
+    const fb = new ResilientLoader(fbScene, { concurrency: 4, deadline: 25000, retries: 0 });
+    const fbResult = await fb.loadAll([
+        { key: 'fb_1', file: base + '/assets/backgrounds/5.png' },
+        { key: 'fb_2', file: base + '/assets/characters/5.png' },
+    ]);
+    check('assets survive a blocked <img> path', fbResult.loaded === 2,
+        `loaded=${fbResult.loaded} failed=${fbResult.failed.length}`);
+    check('fallback used fetch, not <img>', fb.used.image.has('fetch+blob'),
+        `transports: ${[...fb.used.image].join(', ') || 'none'}`);
+    check('transport summary is reportable', /img: fetch\+blob/.test(fb.describeTransports()),
+        fb.describeTransports());
+    imgFails = false;
+
+    // ===============================================================
+    console.log('\n[7] Bitmap transport skipped cleanly when unavailable');
+    // ===============================================================
+    check('createImageBitmap genuinely absent in harness',
+        typeof createImageBitmap === 'undefined');
+    const noBm = new ResilientLoader(scene, { concurrency: 2, deadline: 8000, retries: 0 });
+    const noBmResult = await noBm.loadAll([
+        { key: 'nbm_1', file: base + '/assets/items/1.png' },
+    ]);
+    check('asset still loads without the bitmap transport', noBmResult.loaded === 1,
+        `loaded=${noBmResult.loaded}`);
+
+    // ===============================================================
+    console.log('\n[8] Audio falls back to XHR when fetch is unavailable');
+    // ===============================================================
+    const realFetch = global.fetch;
+    global.fetch = () => Promise.reject(new TypeError('fetch blocked'));
+    // The XHR mock deliberately uses the native fetch, not global.fetch, so
+    // blocking fetch below only disables the fetch transports.
+    const xhrAudio = new Map();
+    const xhrScene = {
+        textures: { exists: () => false, addImage: () => true, addCanvas: () => true },
+        cache: {
+            audio: { exists: (k) => xhrAudio.has(k), add: (k, b) => xhrAudio.set(k, b) },
+        },
+    };
+    const xhrLoader = new ResilientLoader(xhrScene, {
+        concurrency: 2, deadline: 20000, retries: 0,
+    });
+    const xhrResult = await xhrLoader.loadAll([
+        { key: 'music_1', file: base + '/assets/music/theme-1.ogg' },
+    ]);
+    global.fetch = realFetch;
+    check('audio survives a blocked fetch', xhrResult.loaded === 1,
+        `loaded=${xhrResult.loaded} failed=${xhrResult.failed.length}`);
+    check('XHR transport was used', xhrLoader.used.audio.has('xhr'),
+        `transports: ${[...xhrLoader.used.audio].join(', ') || 'none'}`);
 
     server.close();
     console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : failures + ' CHECK(S) FAILED'}`);
