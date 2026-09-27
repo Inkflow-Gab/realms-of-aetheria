@@ -6,6 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="screen-orientation" content="landscape">
+    <meta name="theme-color" content="#0a0a1a">
     <title>Realms of Aetheria</title>
     <style>
         * {
@@ -13,7 +14,9 @@
             padding: 0;
             box-sizing: border-box;
         }
-        body {
+        html, body {
+            width: 100%;
+            height: 100%;
             background: #0a0a1a;
             overflow: hidden;
             touch-action: none;
@@ -31,13 +34,17 @@
         canvas {
             display: block;
         }
+
+        /* ==========================================
+           LOADING SCREEN
+           ========================================== */
         #loading {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: #0a0a1a;
+            background: radial-gradient(ellipse at 50% 40%, #1a1a3e 0%, #0a0a1a 70%);
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -45,42 +52,462 @@
             z-index: 1000;
             color: #c9a84c;
             font-family: 'Georgia', serif;
-        }
-        #loading h1 {
-            font-size: 2.5em;
-            margin-bottom: 20px;
-            text-shadow: 0 0 20px #c9a84c;
-        }
-        #loading p {
-            font-size: 1.2em;
-            opacity: 0.8;
-        }
-        .loading-bar {
-            width: 300px;
-            height: 6px;
-            background: #1a1a3e;
-            border-radius: 3px;
-            margin-top: 30px;
             overflow: hidden;
+            transition: opacity 0.7s ease;
         }
-        .loading-bar-fill {
+        #loading.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #loading-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, #c9a84c, #ffd700);
+            background: url('assets/backgrounds/1.png') center/cover no-repeat;
+            opacity: 0.18;
+            z-index: 0;
+            animation: bg-drift 24s ease-in-out infinite alternate;
+        }
+        @keyframes bg-drift {
+            from { transform: scale(1.05) translate(-1%, 1%); }
+            to   { transform: scale(1.12) translate(1%, -1%); }
+        }
+
+        /* Drifting motes so the screen is never visually static */
+        #motes {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+        .mote {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            border-radius: 50%;
+            background: #c9a84c;
+            opacity: 0;
+            animation: mote-rise linear infinite;
+        }
+        @keyframes mote-rise {
+            0%   { opacity: 0;    transform: translateY(0) scale(0.6); }
+            12%  { opacity: 0.75; }
+            85%  { opacity: 0.35; }
+            100% { opacity: 0;    transform: translateY(-320px) scale(1.1); }
+        }
+
+        #loading-content {
+            position: relative;
+            z-index: 2;
+            text-align: center;
+            padding: 0 24px;
+        }
+
+        /* --- Spinner: rotating rune ring --- */
+        #spinner {
+            position: relative;
+            width: 132px;
+            height: 132px;
+            margin: 0 auto 26px;
+        }
+        #spinner .ring {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            border: 2px solid transparent;
+        }
+        /* Outer ring with a bright leading arc */
+        #spinner .ring-outer {
+            border-top-color: #c9a84c;
+            border-right-color: rgba(201, 168, 76, 0.35);
+            border-bottom-color: rgba(201, 168, 76, 0.12);
+            border-left-color: rgba(201, 168, 76, 0.12);
+            animation: spin 1.15s cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite;
+            box-shadow: 0 0 18px rgba(201, 168, 76, 0.22);
+        }
+        /* Inner ring counter-rotating the other way */
+        #spinner .ring-inner {
+            inset: 16px;
+            border-bottom-color: #ffd700;
+            border-left-color: rgba(255, 215, 0, 0.3);
+            border-top-color: rgba(255, 215, 0, 0.1);
+            border-right-color: rgba(255, 215, 0, 0.1);
+            animation: spin-rev 1.8s linear infinite;
+        }
+        /* Third decorative ring, slow and faint */
+        #spinner .ring-outer2 {
+            inset: 30px;
+            border-top-color: rgba(240, 230, 211, 0.55);
+            border-left-color: rgba(240, 230, 211, 0.12);
+            border-right-color: rgba(240, 230, 211, 0.12);
+            border-bottom-color: rgba(240, 230, 211, 0.12);
+            animation: spin 3.1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        @keyframes spin-rev {
+            to { transform: rotate(-360deg); }
+        }
+        /* Pulsing core in the middle of the rings */
+        #spinner .core {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 26px;
+            height: 26px;
+            margin: -13px 0 0 -13px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #fff3c4 0%, #c9a84c 55%, rgba(201, 168, 76, 0) 75%);
+            animation: core-pulse 1.6s ease-in-out infinite;
+        }
+        @keyframes core-pulse {
+            0%, 100% { transform: scale(0.75); opacity: 0.65; }
+            50%      { transform: scale(1.2);  opacity: 1; }
+        }
+
+        /* --- Title --- */
+        #loading h1 {
+            font-size: 2.6em;
+            letter-spacing: 2px;
+            margin-bottom: 6px;
+            color: #f0e6d3;
+            animation: title-glow 2.2s ease-in-out infinite alternate;
+        }
+        @keyframes title-glow {
+            from { text-shadow: 0 0 12px rgba(201, 168, 76, 0.5), 0 2px 4px #000; }
+            to   { text-shadow: 0 0 30px rgba(255, 215, 0, 0.9), 0 0 60px rgba(201, 168, 76, 0.6), 0 2px 4px #000; }
+        }
+        #loading .subtitle {
+            font-size: 0.95em;
+            letter-spacing: 3px;
+            opacity: 0.65;
+            margin-bottom: 28px;
+            animation: fade-breathe 3s ease-in-out infinite;
+        }
+        @keyframes fade-breathe {
+            0%, 100% { opacity: 0.45; }
+            50%      { opacity: 0.8; }
+        }
+
+        /* --- Progress bar --- */
+        #loading-bar-container {
+            position: relative;
+            width: min(460px, 78vw);
+            height: 14px;
+            background: rgba(10, 10, 26, 0.85);
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 0 auto 14px;
+            border: 1px solid rgba(201, 168, 76, 0.35);
+            box-shadow: 0 0 18px rgba(201, 168, 76, 0.15), inset 0 0 10px rgba(0, 0, 0, 0.6);
+        }
+        /* Indeterminate sweep: keeps moving even at 0% real progress so the
+           screen never looks frozen while assets are still being fetched. */
+        #loading-bar-sheen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 45%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(201, 168, 76, 0.35), transparent);
+            animation: sheen 1.4s ease-in-out infinite;
+        }
+        @keyframes sheen {
+            0%   { transform: translateX(-100%); }
+            100% { transform: translateX(320%); }
+        }
+        #loading-bar-fill {
+            position: relative;
+            height: 100%;
             width: 0%;
-            transition: width 0.3s;
+            background: linear-gradient(90deg, #8a6d2f, #c9a84c, #ffd700);
+            background-size: 200% 100%;
+            border-radius: 8px;
+            transition: width 0.25s ease-out;
+            animation: shimmer 1.6s linear infinite;
+            box-shadow: 0 0 12px rgba(255, 215, 0, 0.55);
+        }
+        @keyframes shimmer {
+            0%   { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* --- Readouts --- */
+        #loading-stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            width: min(460px, 78vw);
+            margin: 0 auto 8px;
+            font-size: 0.85em;
+        }
+        #loading-percent {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #f0e6d3;
+            min-width: 74px;
+            text-align: left;
+            font-variant-numeric: tabular-nums;
+        }
+        #loading-status {
+            opacity: 0.75;
+            text-align: right;
+            max-width: 60%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        #loading-count {
+            width: min(460px, 78vw);
+            margin: 0 auto;
+            font-size: 0.72em;
+            opacity: 0.4;
+            letter-spacing: 1px;
+        }
+
+        /* --- Rotating tips --- */
+        #loading-tips {
+            position: absolute;
+            bottom: 26px;
+            left: 0;
+            width: 100%;
+            font-size: 0.82em;
+            opacity: 0.5;
+            font-style: italic;
+            padding: 0 24px;
+            z-index: 2;
+        }
+        #loading-tip-text {
+            display: inline-block;
+            transition: opacity 0.45s ease, transform 0.45s ease;
+        }
+        #loading-tip-text.fading {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+
+        /* --- Error box --- */
+        #loading-error {
+            display: none;
+            margin-top: 18px;
+            padding: 12px 18px;
+            max-width: min(560px, 86vw);
+            border: 1px solid rgba(231, 76, 60, 0.5);
+            border-radius: 8px;
+            background: rgba(231, 76, 60, 0.12);
+            color: #ffb3ac;
+            font-size: 0.78em;
+            line-height: 1.5;
+            text-align: left;
+        }
+
+        /* --- Landscape hint for portrait mode --- */
+        #rotate-hint {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #0a0a1a;
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: #c9a84c;
+            font-family: 'Georgia', serif;
+            text-align: center;
+        }
+        #rotate-hint .icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+            animation: rotate-phone 2s ease-in-out infinite;
+        }
+        @keyframes rotate-phone {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(90deg); }
+        }
+        @media (orientation: portrait) {
+            #rotate-hint { display: flex; }
         }
     </style>
 </head>
 <body>
+    <div id="rotate-hint">
+        <div class="icon">📱</div>
+        <h2>Rotate Your Device</h2>
+        <p>This game is designed for landscape mode</p>
+    </div>
+
     <div id="loading">
-        <h1>Realms of Aetheria</h1>
-        <p>Loading assets...</p>
-        <div class="loading-bar">
-            <div class="loading-bar-fill" id="loading-fill"></div>
+        <div id="loading-bg"></div>
+        <div id="motes"></div>
+
+        <div id="loading-content">
+            <div id="spinner">
+                <div class="ring ring-outer"></div>
+                <div class="ring ring-inner"></div>
+                <div class="ring ring-outer2"></div>
+                <div class="core"></div>
+            </div>
+
+            <h1>Realms of Aetheria</h1>
+            <p class="subtitle">A MOBILE RPG ADVENTURE</p>
+
+            <div id="loading-bar-container">
+                <div id="loading-bar-sheen"></div>
+                <div id="loading-bar-fill"></div>
+            </div>
+
+            <div id="loading-stats">
+                <div id="loading-percent">0%</div>
+                <div id="loading-status">Starting up...</div>
+            </div>
+            <div id="loading-count"></div>
+
+            <div id="loading-error"></div>
+        </div>
+
+        <div id="loading-tips">
+            <span id="loading-tip-text">Tip: Explore all 9 zones to find legendary loot!</span>
         </div>
     </div>
+
     <div id="game-container"></div>
+
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
     <script type="module" src="src/main.js"></script>
+
+    <script>
+    (function () {
+        'use strict';
+
+        var el = {
+            root:     document.getElementById('loading'),
+            fill:     document.getElementById('loading-bar-fill'),
+            percent:  document.getElementById('loading-percent'),
+            status:   document.getElementById('loading-status'),
+            count:    document.getElementById('loading-count'),
+            error:    document.getElementById('loading-error'),
+            tip:      document.getElementById('loading-tip-text'),
+            motes:    document.getElementById('motes')
+        };
+
+        var hidden = false;
+        var lastPct = 0;
+
+        // ---------------------------------------------------------
+        // Ambient motes
+        // ---------------------------------------------------------
+        (function spawnMotes() {
+            if (!el.motes) return;
+            for (var i = 0; i < 18; i++) {
+                var m = document.createElement('div');
+                m.className = 'mote';
+                m.style.left = (Math.random() * 100) + '%';
+                m.style.bottom = (-10 - Math.random() * 30) + '%';
+                m.style.animationDuration = (5 + Math.random() * 6) + 's';
+                m.style.animationDelay = (Math.random() * 6) + 's';
+                var s = 1.5 + Math.random() * 2.5;
+                m.style.width = s + 'px';
+                m.style.height = s + 'px';
+                el.motes.appendChild(m);
+            }
+        })();
+
+        // ---------------------------------------------------------
+        // Rotating tips
+        // ---------------------------------------------------------
+        var TIPS = [
+            'Tip: Explore all 9 zones to find legendary loot!',
+            'Tip: Level up your HP and DEF before taking on a boss.',
+            'Tip: Potions can be bought in bulk from any town shop.',
+            'Tip: Different weapon types suit different classes.',
+            'Tip: Defeating monsters in a group earns bonus gold.',
+            'Tip: Your progress saves automatically between zones.'
+        ];
+
+        (function rotateTips() {
+            if (!el.tip) return;
+            setInterval(function () {
+                el.tip.classList.add('fading');
+                setTimeout(function () {
+                    el.tip.textContent = TIPS[Math.floor(Math.random() * TIPS.length)];
+                    el.tip.classList.remove('fading');
+                }, 450);
+            }, 4200);
+        })();
+
+        // ---------------------------------------------------------
+        // Progress reporting (called from Phaser)
+        // ---------------------------------------------------------
+        /**
+         * @param {number} percent   0-100
+         * @param {string} status    human readable status line
+         * @param {object} [extra]   { loaded, total, bytes }
+         */
+        window.updateLoading = function (percent, status, extra) {
+            if (hidden || !el.fill) return;
+
+            // Never let the bar visibly jump backwards.
+            var pct = Math.max(lastPct, Math.max(0, Math.min(100, percent || 0)));
+            lastPct = pct;
+
+            el.fill.style.width = pct + '%';
+            el.percent.textContent = Math.floor(pct) + '%';
+            if (status) el.status.textContent = status;
+
+            if (extra && typeof extra.total === 'number' && extra.total > 0) {
+                el.count.textContent =
+                    extra.loaded + ' / ' + extra.total + ' assets' +
+                    (extra.bytes ? '  ·  ' + extra.bytes : '');
+            }
+        };
+
+        /** Jump straight to a state with no progress animation. */
+        window.setLoadingMessage = function (percent, status) {
+            if (hidden || !el.fill) return;
+            lastPct = percent;
+            el.fill.style.width = percent + '%';
+            el.percent.textContent = Math.floor(percent) + '%';
+            if (status) el.status.textContent = status;
+        };
+
+        /** Surface a fatal load failure instead of hanging on a fake 0%. */
+        window.showLoadingError = function (message) {
+            if (!el.error) return;
+            el.error.style.display = 'block';
+            el.error.textContent = message;
+            if (el.status) el.status.textContent = 'Failed to load';
+        };
+
+        /** Fade the loader out. Safe to call more than once. */
+        window.hideLoading = function () {
+            if (hidden || !el.root) return;
+            hidden = true;
+            el.root.classList.add('hidden');
+            setTimeout(function () {
+                if (el.root) el.root.style.display = 'none';
+            }, 750);
+        };
+
+        // Keep the spinner turning even if Phaser never reports: if no progress
+        // arrives within 8s, switch to an honest "still working" message rather
+        // than sitting on a static screen.
+        var watchdog = setInterval(function () {
+            if (hidden) { clearInterval(watchdog); return; }
+            if (lastPct === 0 && window.__phaserStarted) {
+                window.setLoadingMessage(0, 'Still loading... please wait');
+            }
+        }, 8000);
+    })();
+    </script>
 </body>
 </html>

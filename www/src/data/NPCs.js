@@ -6,7 +6,7 @@ export const NPCS = {
     // === TOWN NPCs ===
     elder_marcus: {
         id: 'elder_marcus', name: 'Elder Marcus', role: 'Elder',
-        sprite: 'npcs/villager_1', x: 5, y: 5,
+        sprite: 'npcs/MiniOldMan.png', x: 5, y: 5,
         dialogues: [
             "Welcome to Aetheria, young one. Our village has stood for a thousand years.",
             "The darkness grows in the east. We need heroes like you.",
@@ -18,7 +18,7 @@ export const NPCS = {
     },
     blacksmith_brom: {
         id: 'blacksmith_brom', name: 'Blacksmith Brom', role: 'Blacksmith',
-        sprite: 'npcs/villager_2', x: 3, y: 4,
+        sprite: 'npcs/MiniWorker.png', x: 3, y: 4,
         dialogues: [
             "Finest steel in the realm! What do you need?",
             "Bring me iron ore and I'll forge you something special.",
@@ -30,7 +30,7 @@ export const NPCS = {
     },
     potion_seller_luna: {
         id: 'potion_seller_luna', name: 'Luna the Alchemist', role: 'Potion Seller',
-        sprite: 'npcs/villager_3', x: 7, y: 4,
+        sprite: 'npcs/MiniVillagerWoman.png', x: 7, y: 4,
         dialogues: [
             "Potions, elixirs, and brews! Get them here!",
             "This one here will bring you back from the brink of death.",
@@ -42,7 +42,7 @@ export const NPCS = {
     },
     shopkeeper_gilda: {
         id: 'shopkeeper_gilda', name: 'Gilda', role: 'General Store',
-        sprite: 'npcs/villager_4', x: 6, y: 3,
+        sprite: 'npcs/MiniPeasant.png', x: 6, y: 3,
         dialogues: [
             "Welcome to Gilda's General Store!",
             "I've got everything an adventurer needs.",
@@ -54,7 +54,7 @@ export const NPCS = {
     },
     armor_smith_thorin: {
         id: 'armor_smith_thorin', name: 'Thorin the Armorsmith', role: 'Armorsmith',
-        sprite: 'npcs/villager_5', x: 4, y: 6,
+        sprite: 'npcs/MiniNobleMan.png', x: 4, y: 6,
         dialogues: [
             "Armor that saves lives! Browse my collection.",
             "Dragon scale armor? For the right price, anything is possible.",
@@ -66,7 +66,7 @@ export const NPCS = {
     },
     innkeeper_rosa: {
         id: 'innkeeper_rosa', name: 'Rosa', role: 'Innkeeper',
-        sprite: 'npcs/villager_6', x: 8, y: 5,
+        sprite: 'npcs/MiniPrincess.png', x: 8, y: 5,
         dialogues: [
             "Welcome to the Restful Dragon Inn!",
             "A room for the night? Only 20 gold.",
@@ -79,7 +79,7 @@ export const NPCS = {
     },
     wizard_eldrin: {
         id: 'wizard_eldrin', name: 'Wizard Eldrin', role: 'Mage Trainer',
-        sprite: 'npcs/villager_7', x: 2, y: 7,
+        sprite: 'npcs/MiniNobleWoman.png', x: 2, y: 7,
         dialogues: [
             "Ah, a seeker of arcane knowledge.",
             "Magic is not just power, it's understanding.",
@@ -91,7 +91,7 @@ export const NPCS = {
     },
     priest_aurora: {
         id: 'priest_aurora', name: 'Priest Aurora', role: 'Healer',
-        sprite: 'npcs/villager_8', x: 9, y: 6,
+        sprite: 'npcs/MiniQueen.png', x: 9, y: 6,
         dialogues: [
             "Blessings of the light upon you.",
             "I can heal your wounds, for a small donation.",
@@ -104,7 +104,7 @@ export const NPCS = {
     },
     guard_captain: {
         id: 'guard_captain', name: 'Captain Aldric', role: 'Guard Captain',
-        sprite: 'npcs/villager_9', x: 5, y: 8,
+        sprite: 'npcs/MiniVillagerMan.png', x: 5, y: 8,
         dialogues: [
             "Halt! ...Oh, it's you. Keep the streets safe.",
             "Monsters have been spotted near the forest. Be careful.",
@@ -116,7 +116,7 @@ export const NPCS = {
     },
     merchant_sam: {
         id: 'merchant_sam', name: 'Sam the Merchant', role: 'Traveling Merchant',
-        sprite: 'npcs/villager_10', x: 10, y: 7,
+        sprite: 'npcs/MiniOldWoman.png', x: 10, y: 7,
         dialogues: [
             "Rare goods from distant lands!",
             "I've traveled the whole realm. Trust me, these prices are fair.",
@@ -130,7 +130,7 @@ export const NPCS = {
     // === DUNGEON NPCs ===
     prisoner_karl: {
         id: 'prisoner_karl', name: 'Prisoner Karl', role: 'Prisoner',
-        sprite: 'npcs/villager_11', x: 15, y: 20,
+        sprite: 'npcs/MiniPeasant.png', x: 15, y: 20,
         dialogues: [
             "Help! I've been locked down here for days!",
             "There's a key on the guard's desk. Please, free me!",
@@ -142,7 +142,7 @@ export const NPCS = {
     },
     ghost_scholar: {
         id: 'ghost_scholar', name: 'Ghost of Scholar', role: 'Ghost',
-        sprite: 'npcs/villager_12', x: 30, y: 35,
+        sprite: 'npcs/MiniOldMan.png', x: 30, y: 35,
         dialogues: [
             "I was a scholar in life, studying the ancient ruins.",
             "The lich's phylactery is hidden in the deepest chamber.",
@@ -155,7 +155,7 @@ export const NPCS = {
     },
     treasure_hunter_zara: {
         id: 'treasure_hunter_zara', name: 'Zara the Treasure Hunter', role: 'Adventurer',
-        sprite: 'npcs/villager_13', x: 45, y: 40,
+        sprite: 'npcs/MiniWorker.png', x: 45, y: 40,
         dialogues: [
             "Shhh! I found the dragon's lair. Want in?",
             "We split the treasure 50/50. Deal?",

@@ -2,6 +2,8 @@
 // REALMS OF AETHERIA - AUDIO SYSTEM
 // ============================================
 
+import { SOUND_ALIASES, MUSIC_ALIASES } from '../data/AssetManifest.js';
+
 export class AudioSystem {
     constructor() {
         this.sounds = {};
@@ -10,39 +12,41 @@ export class AudioSystem {
         this.musicVolume = 0.5;
         this.sfxVolume = 0.7;
         this.muted = false;
+        this.scene = null;
     }
 
     init(scene) {
         this.scene = scene;
 
-        // Load sounds
-        const soundFiles = [
-            'attack', 'hit', 'crit', 'heal', 'levelup', 'death',
-            'coin', 'potion', 'equip', 'quest', 'click', 'step',
-            'fireball', 'ice', 'lightning', 'arrow', 'magic',
-            'monster_die', 'player_hurt', 'victory', 'defeat'
-        ];
-
-        for (const name of soundFiles) {
-            try {
-                this.sounds[name] = scene.sound.add(`sfx_${name}`, { volume: this.sfxVolume });
-            } catch (e) {
-                // Sound file not found, skip
-            }
+        // --------------------------------------------------
+        // Sound effects
+        // --------------------------------------------------
+        // The sound pack ships numbered files (1.ogg ... 40.ogg), so the
+        // semantic names the game asks for are resolved through
+        // SOUND_ALIASES. Names with no loaded file are simply skipped --
+        // play() then does nothing instead of throwing.
+        for (const [name, index] of Object.entries(SOUND_ALIASES)) {
+            const key = `sfx_${index}`;
+            if (!scene.cache.audio.exists(key)) continue;
+            this.sounds[name] = scene.sound.add(key, { volume: this.sfxVolume });
         }
 
-        // Load music
-        const musicFiles = ['town', 'battle', 'dungeon', 'boss', 'menu'];
-        for (const name of musicFiles) {
-            try {
-                this.music[name] = scene.sound.add(`music_${name}`, {
-                    volume: this.musicVolume,
-                    loop: true,
-                });
-            } catch (e) {
-                // Music file not found, skip
-            }
+        // --------------------------------------------------
+        // Music
+        // --------------------------------------------------
+        for (const [name, theme] of Object.entries(MUSIC_ALIASES)) {
+            const key = `music_${theme}`;
+            if (!scene.cache.audio.exists(key)) continue;
+            this.music[name] = scene.sound.add(key, {
+                volume: this.musicVolume,
+                loop: true,
+            });
         }
+
+        console.info(
+            `[audio] ${Object.keys(this.sounds).length} sfx, ` +
+            `${Object.keys(this.music).length} music tracks ready`
+        );
     }
 
     play(name) {
@@ -54,7 +58,9 @@ export class AudioSystem {
 
     playMusic(name) {
         if (this.currentMusic === name) return;
+
         this.stopMusic();
+
         if (this.music[name]) {
             this.music[name].play();
             this.currentMusic = name;
@@ -86,6 +92,9 @@ export class AudioSystem {
         this.muted = !this.muted;
         if (this.muted) {
             this.stopMusic();
+        } else if (this.scene) {
+            // Resume whatever was playing before the mute.
+            this.playMusic('menu');
         }
         return this.muted;
     }

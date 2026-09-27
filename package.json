@@ -5,8 +5,11 @@
   "main": "index.js",
   "scripts": {
     "start": "npx serve . -p 8080",
-    "build": "echo 'No build step required - static files'",
-    "cap:sync": "npx cap sync",
+    "build": "node scripts/prepare-web.js",
+    "cap:sync": "npm run build && npx cap sync",
+    "cap:copy": "npm run build && npx cap copy",
+    "apk:debug": "npm run cap:sync && cd android && ./gradlew assembleDebug",
+    "apk:release": "npm run cap:sync && cd android && ./gradlew assembleRelease",
     "cap:android": "npx cap open android"
   },
   "keywords": ["rpg", "game", "mobile", "phaser", "capacitor"],

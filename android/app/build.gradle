@@ -1,5 +1,40 @@
 apply plugin: 'com.android.application'
 
+// ============================================
+// SIGNING
+// ============================================
+//
+// A release APK signed with the throwaway Android debug key can never be
+// replaced later: Android matches installs by signing key, so every rebuild
+// looks like a different app and the user has to uninstall first.
+//
+// Credentials come from android/keystore.properties when present, otherwise
+// from environment variables (this is what CI uses), otherwise the build falls
+// back to debug signing so a fresh clone still compiles.
+// ============================================
+def keystorePropsFile = rootProject.file('keystore.properties')
+def keystoreProps = new Properties()
+def hasKeystore = keystorePropsFile.exists()
+if (hasKeystore) {
+    keystoreProps.load(new FileInputStream(keystorePropsFile))
+}
+
+// env var name -> property name
+def signingValue = { String prop, String env, String fallback ->
+    if (keystoreProps[prop]) return keystoreProps[prop]
+    if (System.getenv(env)) return System.getenv(env)
+    return fallback
+}
+
+def releaseStoreFile = signingValue('storeFile', 'KEYSTORE_FILE', null)
+def releaseStorePassword = signingValue('storePassword', 'KEYSTORE_PASSWORD', null)
+def releaseKeyAlias = signingValue('keyAlias', 'KEY_ALIAS', null)
+def releaseKeyPassword = signingValue('keyPassword', 'KEY_PASSWORD', null)
+
+// A keystore is only usable if every part of it resolved.
+def canSignRelease = releaseStoreFile && releaseStorePassword &&
+        releaseKeyAlias && releaseKeyPassword
+
 android {
     namespace "com.aetheria.realms"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,17 +42,48 @@ android {
         applicationId "com.aetheria.realms"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // Bump on every release. Android refuses an "update" whose
+        // versionCode is not higher than the installed one.
+        versionCode 2
+        versionName "1.0.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+
+    signingConfigs {
+        if (canSignRelease) {
+            release {
+                // storeFile is relative to android/app, so point at android/.
+                storeFile rootProject.file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (canSignRelease) {
+                signingConfig signingConfigs.release
+            } else {
+                logger.warn(
+                    'Realms of Aetheria: no keystore found, falling back to DEBUG ' +
+                    'signing. Installs cannot be updated in place until ' +
+                    'android/keystore.properties is configured.'
+                )
+            }
+        }
+        debug {
+            // Sign debug with the same key so debug and release builds can
+            // replace one another during development.
+            if (canSignRelease) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

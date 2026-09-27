@@ -7,6 +7,10 @@ export const GAME_CONFIG = {
     HEIGHT: 720,
     TILE_SIZE: 64,
 
+    // Shown on the main menu. Keep in sync with versionName in
+    // android/app/build.gradle and package.json.
+    VERSION: '1.0.1',
+
     // Physics
     GRAVITY: 800,
     PLAYER_SPEED: 220,

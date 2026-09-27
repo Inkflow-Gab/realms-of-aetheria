@@ -67,6 +67,23 @@ const config = {
 // START GAME
 // ============================================
 
+// Let the loading screen know the engine is alive, so its watchdog can stop
+// claiming "Starting up..." while Phaser is actually booting.
+window.__phaserStarted = true;
+window.setLoadingMessage?.(1, 'Starting game engine...');
+
+// Phaser is loaded from a CDN <script> tag above. If that failed (offline
+// first-run, blocked CDN) there is no engine and the loader would sit at 0%
+// forever, so bail out with a readable message instead.
+if (typeof Phaser === 'undefined') {
+    window.showLoadingError?.(
+        'Could not load the Phaser game engine (phaser.min.js). ' +
+        'Check your internet connection the first time the app is opened, ' +
+        'then restart the app.'
+    );
+    throw new Error('Phaser failed to load from CDN');
+}
+
 const game = new Phaser.Game(config);
 
 // Prevent default touch behaviors

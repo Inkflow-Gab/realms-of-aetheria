@@ -27,6 +27,18 @@ npm-debug.log*
 android/app/src/main/assets/capacitor.config.json
 android/app/src/main/assets/capacitor.plugins.json
 
+# Android signing -- NEVER commit these
+# Losing the keystore means you can never update an existing install.
+android/keystore.jks
+android/*.keystore
+android/*.jks
+android/keystore.properties
+*.p12
+*.pfx
+
+# Generated web bundle (rebuilt by `npm run build`)
+www/
+
 # Temp
 tmp/
 temp/
