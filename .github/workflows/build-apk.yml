@@ -45,6 +45,11 @@ jobs:
         # Install required packages
         sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" || true
 
+    - name: Download gradle-wrapper.jar
+      run: |
+        mkdir -p android/gradle/wrapper
+        curl -L -o android/gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v8.2.0/gradle/wrapper/gradle-wrapper.jar
+
     - name: Make gradlew executable
       run: chmod +x android/gradlew
 
