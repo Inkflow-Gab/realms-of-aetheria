@@ -43,7 +43,7 @@ jobs:
         # Accept licenses
         yes | sdkmanager --licenses || true
         # Install required packages
-        sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" || true
+        sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" || true
 
     - name: Download gradle-wrapper.jar
       run: |
