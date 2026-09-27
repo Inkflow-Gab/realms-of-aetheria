@@ -1,7 +1,6 @@
 {
   "appId": "com.aetheria.realms",
   "appName": "Realms of Aetheria",
-  "webDir": "",
   "server": {
     "androidScheme": "https"
   },
