@@ -43,3 +43,7 @@ www/
 tmp/
 temp/
 *.tmp
+
+# Device screenshots pulled off a phone during debugging
+screenshot/
+screenshots/

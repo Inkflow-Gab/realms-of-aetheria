@@ -2,7 +2,7 @@
 // REALMS OF AETHERIA - AUDIO SYSTEM
 // ============================================
 
-import { SOUND_ALIASES, MUSIC_ALIASES } from '../data/AssetManifest.js';
+import { SOUND_ALIASES, MUSIC_ALIASES, NAMED_SOUND_KEYS } from '../data/AssetManifest.js';
 
 export class AudioSystem {
     constructor() {
@@ -27,6 +27,17 @@ export class AudioSystem {
         // play() then does nothing instead of throwing.
         for (const [name, index] of Object.entries(SOUND_ALIASES)) {
             const key = `sfx_${index}`;
+            if (!scene.cache.audio.exists(key)) continue;
+            this.sounds[name] = scene.sound.add(key, { volume: this.sfxVolume });
+        }
+
+        // --------------------------------------------------
+        // Named effects
+        // --------------------------------------------------
+        // Bound after the numbered aliases so a name that was recorded
+        // specifically (a real victory fanfare, a monster roar) always wins
+        // over the same word mapped to a numbered file.
+        for (const [name, key] of Object.entries(NAMED_SOUND_KEYS)) {
             if (!scene.cache.audio.exists(key)) continue;
             this.sounds[name] = scene.sound.add(key, { volume: this.sfxVolume });
         }

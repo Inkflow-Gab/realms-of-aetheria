@@ -1,160 +1,118 @@
 // ============================================
 // REALMS OF AETHERIA - PRELOAD SCENE
 // ============================================
+//
+// The critical assets are loaded through ResilientLoader rather than Phaser's
+// built-in loader. Phaser's queue is all-or-nothing: one request that never
+// settles blocks `create()` forever, which is what produced the frozen
+// "0 / 31 assets" screen. The resilient loader bounds every wait, retries
+// once, and always hands control on to the main menu.
+//
+// Nothing in here is allowed to throw. A missing texture degrades to the dark
+// backdrop; a missing sound is silent. The game always starts.
+// ============================================
 
 import { getCriticalAssets, getDeferredAssets } from '../data/AssetManifest.js';
+import { ResilientLoader } from '../systems/ResilientLoader.js';
 
 export class PreloadScene extends Phaser.Scene {
     constructor() {
         super({ key: 'Preload' });
-        this.loadComplete = false;
         this.failedFiles = [];
-        this.totalBytes = 0;
-        this.progressValue = 0;
     }
 
-    preload() {
+    // No `preload()` on purpose.
+    //
+    // Assets are loaded in `create()` by ResilientLoader, because that is the
+    // only way to bound the wait. Phaser's own loader is left with an empty
+    // queue, so the preload phase finishes instantly and hands straight over.
+    // (Phaser 3.80 has no `LoaderPlugin.skip()`; calling a method that does
+    // not exist here would throw inside the scene boot and hang the game.)
+
+    async create() {
         const critical = getCriticalAssets();
+        const total = critical.length;
 
-        // --------------------------------------------------
-        // Progress -> HTML loading screen
-        // --------------------------------------------------
-        // The HTML screen sits on top of the canvas (z-index 1000), so it is
-        // the only progress display the player ever actually sees. Everything
-        // is mirrored there; the canvas is just a fallback.
-        this.load.on('progress', (value) => {
-            this.progressValue = value;
-            this.setStatus(`Loading assets... ${Math.floor(value * 100)}%`);
+        window.setLoadingMessage?.(1, 'Loading game assets...');
+
+        const loader = new ResilientLoader(this, {
+            concurrency: 6,
+            deadline: 18000,
+            retries: 1,
         });
 
-        this.load.on('fileprogress', (file) => {
-            // Show the real filename so the screen is never blank-looking.
-            this.setStatus(`Loading ${prettyName(file.key)}`);
-        });
-
-        this.load.on('loaderror', (file) => {
-            this.failedFiles.push(file.key);
-            console.warn('[preload] missing asset:', file.key, file.src || '');
-        });
-
-        this.load.on('complete', () => {
-            this.loadComplete = true;
-        });
-
-        // --------------------------------------------------
-        // Queue the critical assets
-        // --------------------------------------------------
-        for (const asset of critical) {
-            if (asset.file.endsWith('.ogg')) {
-                this.load.audio(asset.key, asset.file);
-            } else {
-                this.load.image(asset.key, asset.file);
+        const result = await loader.loadAll(
+            critical,
+            ({ done, loaded, current }) => {
+                // Progress is measured against the critical set, so the bar
+                // genuinely reaches 100% when the menu can be drawn.
+                const percent = 2 + (done / total) * 96;
+                window.updateLoading?.(percent, describe(current, done, total), {
+                    loaded,
+                    total,
+                });
             }
-        }
+        );
 
-        this.totalBytes = critical.length;
-
-        // --------------------------------------------------
-        // Canvas fallback UI (only used if the HTML screen is missing)
-        // --------------------------------------------------
-        if (!document.getElementById('loading')) {
-            this.buildCanvasLoader();
-        }
-
-        // Tell the HTML screen how much work there is, up front.
-        window.setLoadingMessage?.(2, 'Loading game assets...');
-    }
-
-    /**
-     * Minimal in-canvas loader. Only drawn when there is no HTML loading
-     * screen -- otherwise the HTML one covers the canvas completely and this
-     * would be invisible work.
-     */
-    buildCanvasLoader() {
-        const { width, height } = this.cameras.main;
-
-        this.add.rectangle(width / 2, height / 2, width, height, 0x0a0a1a);
-
-        this.add.text(width / 2, height / 2 - 60, 'Realms of Aetheria', {
-            fontFamily: 'Georgia, serif',
-            fontSize: '40px',
-            color: '#c9a84c',
-        }).setOrigin(0.5);
-
-        this.canvasBar = this.add.rectangle(width / 2 - 200, height / 2, 0, 18, 0xc9a84c)
-            .setOrigin(0, 0.5);
-
-        this.canvasPct = this.add.text(width / 2, height / 2 + 40, '0%', {
-            fontFamily: 'Georgia, serif',
-            fontSize: '20px',
-            color: '#f0e6d3',
-        }).setOrigin(0.5);
-
-        const barWidth = 400;
-        this.load.on('progress', (value) => {
-            this.canvasBar.width = barWidth * value;
-            this.canvasPct.setText(`${Math.floor(value * 100)}%`);
-        });
-    }
-
-    /** Push a status line to whichever loader is actually visible. */
-    setStatus(text) {
-        window.updateLoading?.(this.progressValue * 100, text, {
-            loaded: this.load?.totalComplete ?? 0,
-            total: this.totalBytes,
-        });
-    }
-
-    create() {
-        // Progress is real now, so the screen reaches 100% on its own.
-        window.updateLoading?.(100, 'Ready!', {
-            loaded: this.totalBytes,
-            total: this.totalBytes,
-        });
+        this.failedFiles = result.failed;
 
         if (this.failedFiles.length) {
-            console.warn(
-                `[preload] ${this.failedFiles.length} asset(s) failed to load:`,
-                this.failedFiles
+            // Surfaced on screen, not just the console: this is the line that
+            // tells us *why* assets are missing if it happens on a device.
+            window.reportDiag?.(
+                `${result.loaded}/${total} loaded · ` +
+                `${this.failedFiles.length} failed: ` +
+                this.failedFiles.slice(0, 3).map(prettyName).join(', ')
             );
+        } else {
+            window.reportDiag?.(`${result.loaded}/${total} assets ready`);
         }
 
-        // Hand off to the menu, then keep loading the rest in the background.
+        window.updateLoading?.(100, 'Ready!', {
+            loaded: result.loaded,
+            total,
+        });
+
+        // Hand off, then keep the remaining sprites and 22MB of audio loading
+        // behind the menu so it appears immediately and stays interactive.
         this.scene.start('MainMenu');
-        this.loadDeferredAssets();
+        this.loadDeferredAssets(loader);
     }
 
     /**
-     * Loads gameplay sprites and the 22MB of audio without blocking the menu.
+     * Loads gameplay sprites and audio without blocking the menu.
      *
-     * The main menu is already on screen and interactive at this point, so the
-     * player can start a new game or read the credits while this runs.
+     * Textures and audio are written to the game-wide caches, so they stay
+     * valid even though this scene has been shut down by the time they land.
      */
-    loadDeferredAssets() {
+    loadDeferredAssets(loader) {
         const deferred = getDeferredAssets();
         if (!deferred.length) return;
 
-        console.info(`[deferred] loading ${deferred.length} assets in the background`);
+        console.info(`[deferred] loading ${deferred.length} assets in background`);
 
-        this.load.on('loaderror', (file) => {
-            console.warn('[deferred] missing asset:', file.key, file.src || '');
-        });
+        loader.concurrency = 4;
+        loader.deadline = 120000;
+        loader.retries = 0;
 
-        for (const asset of deferred) {
-            if (asset.file.endsWith('.ogg')) {
-                this.load.audio(asset.key, asset.file);
-            } else {
-                this.load.image(asset.key, asset.file);
+        loader.loadAll(deferred, undefined, { background: true }).then(({ failed }) => {
+            if (failed.length) {
+                console.warn(`[deferred] ${failed.length} unavailable:`, failed);
             }
-        }
-
-        // Non-blocking: returns immediately, menu stays interactive.
-        this.load.start();
+        });
     }
 }
 
 /** 'assets/music/theme-1.ogg' -> 'theme-1.ogg' */
-function prettyName(key) {
-    const parts = key.split('_');
-    return parts.length > 1 ? parts.slice(1).join('_') : key;
+function prettyName(file) {
+    const name = String(file).split('/').pop() || String(file);
+    return name.replace(/\.[a-z0-9]+$/i, '');
+}
+
+/** A status line that always names a real file, so the screen is never blank. */
+function describe(file, done, total) {
+    if (file) {
+        return `Loading ${prettyName(file)} (${done + 1}/${total})`;
+    }
+    return `Loading assets... ${done}/${total}`;
 }

@@ -293,6 +293,18 @@
             transform: translateY(8px);
         }
 
+        /* --- Diagnostics line ---
+           Reports exactly what the loader resolved, so a device-side problem
+           is visible in a screenshot instead of only in logcat. */
+        #loading-diag {
+            margin-top: 10px;
+            min-height: 1em;
+            font-size: 0.68em;
+            letter-spacing: 0.04em;
+            color: #6f8fa8;
+            opacity: 0.85;
+        }
+
         /* --- Error box --- */
         #loading-error {
             display: none;
@@ -371,6 +383,7 @@
                 <div id="loading-status">Starting up...</div>
             </div>
             <div id="loading-count"></div>
+            <div id="loading-diag"></div>
 
             <div id="loading-error"></div>
         </div>
@@ -382,7 +395,15 @@
 
     <div id="game-container"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+    <!--
+        Phaser is bundled with the app, not fetched from a CDN.
+
+        The APK ships every byte it needs, so the game has to start on a plane,
+        on first launch, and with no data connection. A CDN <script> tag made
+        the whole game depend on DNS, TLS and the user's network, and a blocked
+        or throttled request left the app on the loading screen forever.
+    -->
+    <script src="vendor/phaser.min.js"></script>
     <script type="module" src="src/main.js"></script>
 
     <script>
@@ -395,6 +416,7 @@
             percent:  document.getElementById('loading-percent'),
             status:   document.getElementById('loading-status'),
             count:    document.getElementById('loading-count'),
+            diag:     document.getElementById('loading-diag'),
             error:    document.getElementById('loading-error'),
             tip:      document.getElementById('loading-tip-text'),
             motes:    document.getElementById('motes')
@@ -488,6 +510,19 @@
             if (el.status) el.status.textContent = 'Failed to load';
         };
 
+        /**
+         * Record what the loader actually resolved.
+         *
+         * Kept on screen deliberately: if a build misbehaves on a real device
+         * this is the one line that distinguishes "assets 404" from "requests
+         * never returned" from "decoded but rejected", none of which are
+         * visible in the progress bar on their own.
+         */
+        window.reportDiag = function (message) {
+            if (!el.diag) return;
+            el.diag.textContent = message;
+        };
+
         /** Fade the loader out. Safe to call more than once. */
         window.hideLoading = function () {
             if (hidden || !el.root) return;
@@ -498,15 +533,36 @@
             }, 750);
         };
 
-        // Keep the spinner turning even if Phaser never reports: if no progress
-        // arrives within 8s, switch to an honest "still working" message rather
-        // than sitting on a static screen.
+        // Watchdog.
+        //
+        // Tracks real movement rather than `lastPct === 0`: the preload scene
+        // sets 1-2% the moment it starts, so the old check could never fire
+        // and the screen sat on a dead "0 / 31" no matter how long it hung.
+        // Now any stall is both reported on screen and logged.
+        var lastMove = Date.now();
+        var origUpdate = window.updateLoading;
+        window.updateLoading = function (percent, status, extra) {
+            if (percent > lastPct || (extra && extra.loaded > 0)) {
+                lastMove = Date.now();
+            }
+            return origUpdate(percent, status, extra);
+        };
+
         var watchdog = setInterval(function () {
             if (hidden) { clearInterval(watchdog); return; }
-            if (lastPct === 0 && window.__phaserStarted) {
-                window.setLoadingMessage(0, 'Still loading... please wait');
+            var idle = Date.now() - lastMove;
+            if (idle < 6000) return;
+
+            if (idle > 20000) {
+                window.showLoadingError(
+                    'Assets are not responding. The game will keep trying -- ' +
+                    'if this persists, reinstall the app so its data is rebuilt.'
+                );
+                window.reportDiag('stalled ' + Math.round(idle / 1000) + 's');
+            } else if (!el.diag || !el.diag.textContent) {
+                window.reportDiag('waiting on assets... ' + Math.round(idle / 1000) + 's');
             }
-        }, 8000);
+        }, 2000);
     })();
     </script>
 </body>

@@ -1,6 +1,6 @@
 {
   "name": "realms-of-aetheria",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Realms of Aetheria - A Full Mobile RPG",
   "main": "index.js",
   "scripts": {
@@ -10,7 +10,9 @@
     "cap:copy": "npm run build && npx cap copy",
     "apk:debug": "npm run cap:sync && cd android && ./gradlew assembleDebug",
     "apk:release": "npm run cap:sync && cd android && ./gradlew assembleRelease",
-    "cap:android": "npx cap open android"
+    "cap:android": "npx cap open android",
+    "test": "node scripts/test-loader.js",
+    "verify": "npm run build && npm test"
   },
   "keywords": ["rpg", "game", "mobile", "phaser", "capacitor"],
   "author": "Gab",

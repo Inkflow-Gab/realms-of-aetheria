@@ -167,6 +167,27 @@ const SFX = Array.from({ length: 40 }, (_, i) => i + 1).map((n) => ({
     group: 'audio',
 }));
 
+// The pack also ships clearly named effects. They were left unused while the
+// game leaned entirely on the numbered files, which is a shame -- a victory
+// fanfare and a monster roar are far more expressive than `27.ogg`.
+//
+// Keys here are semantic, so AudioSystem can look them up by name directly.
+const NAMED_SFX = [
+    ['sfx_ambience_forest', 'forest-ambience.wav'],
+    ['sfx_monster_roar_1', 'monster-1.wav'],
+    ['sfx_monster_roar_2', 'monster-2.wav'],
+    ['sfx_victory_1', 'victory-1.wav'],
+    ['sfx_victory_2', 'victory-2.wav'],
+    ['sfx_victory_3', 'victory-3.wav'],
+    ['sfx_whoosh_1', 'woosh-1.wav'],
+    ['sfx_whoosh_2', 'woosh-2.wav'],
+].map(([key, file]) => ({
+    key,
+    file: `assets/sounds/${file}`,
+    group: 'audio',
+    loop: key === 'sfx_ambience_forest',
+}));
+
 /**
  * Maps the sound names used throughout the game to real numbered files.
  * Names with no entry simply play nothing -- AudioSystem stays silent rather
@@ -214,6 +235,21 @@ export const MUSIC_ALIASES = {
     victory: 6,
 };
 
+/**
+ * Friendly name -> audio key, for the clearly named effects.
+ *
+ * These take precedence over the numbered SOUND_ALIASES: a name listed here is
+ * bound to the effect that was actually recorded for it, rather than to a
+ * number guessed by position.
+ */
+export const NAMED_SOUND_KEYS = {
+    ambience: 'sfx_ambience_forest',
+    roar: 'sfx_monster_roar_1',
+    roar_alt: 'sfx_monster_roar_2',
+    fanfare: 'sfx_victory_1',
+    whoosh: 'sfx_whoosh_1',
+};
+
 export const ASSET_MANIFEST = [
     ...CHARACTERS,
     ...BACKGROUNDS,
@@ -226,6 +262,7 @@ export const ASSET_MANIFEST = [
     ...MENU_MUSIC,
     ...BACKGROUND_MUSIC,
     ...SFX,
+    ...NAMED_SFX,
 ];
 
 /** Assets needed before the main menu can be drawn. */

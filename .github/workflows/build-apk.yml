@@ -34,9 +34,14 @@ jobs:
       run: npm install
 
     - name: Build web assets
-      # Generates www/ from index.html + src/ + public/assets/.
-      # This must run before `cap sync` or the APK ships a stale bundle.
+      # Generates www/ from index.html + src/ + public/assets/ + public/vendor/.
+      # Also verifies every manifest entry exists, so a 404 that would freeze
+      # the game on its loading screen fails here instead of on a device.
       run: npm run build
+
+    - name: Test asset loader
+      # Proves the loader cannot hang on a stalled or missing request.
+      run: npm test
 
     - name: Setup Capacitor
       run: npx cap sync
