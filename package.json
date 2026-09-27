@@ -1,0 +1,27 @@
+{
+  "name": "realms-of-aetheria",
+  "version": "1.0.0",
+  "description": "Realms of Aetheria - A Full Mobile RPG",
+  "main": "index.js",
+  "scripts": {
+    "start": "npx serve . -p 8080",
+    "build": "echo 'No build step required - static files'",
+    "cap:sync": "npx cap sync",
+    "cap:android": "npx cap open android"
+  },
+  "keywords": ["rpg", "game", "mobile", "phaser", "capacitor"],
+  "author": "Gab",
+  "license": "MIT",
+  "dependencies": {
+    "@capacitor/android": "^7.6.9",
+    "@capacitor/core": "^7.6.9",
+    "@capacitor/app": "^7.0.0",
+    "@capacitor/haptics": "^7.0.0",
+    "@capacitor/keyboard": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0",
+    "@capacitor/preferences": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.6.9"
+  }
+}
