@@ -38,9 +38,14 @@ const config = {
         autoCenter: Phaser.Scale.CENTER_BOTH,
         width: GAME_CONFIG.WIDTH,
         height: GAME_CONFIG.HEIGHT,
+        orientation: Phaser.Scale.Orientation.LANDSCAPE,
     },
     input: {
         activePointers: 3,
+    },
+    render: {
+        pixelArt: false,
+        antialias: true,
     },
     scene: [
         BootScene,

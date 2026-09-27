@@ -90,8 +90,8 @@ export class MainMenuScene extends Phaser.Scene {
         }).setOrigin(1, 1);
 
         // Play menu music
-        if (this.sound.get('music_menu')) {
-            this.sound.play('music_menu', { loop: true, volume: 0.4 });
+        if (this.sound.get('music_1')) {
+            this.sound.play('music_1', { loop: true, volume: 0.4 });
         }
     }
 
