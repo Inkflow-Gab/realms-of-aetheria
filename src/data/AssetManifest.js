@@ -100,10 +100,22 @@ const TILES = [
     group: 'gameplay',
 }));
 
-// --- Backgrounds (code uses bg_1 .. bg_9) ---
-const BACKGROUNDS = Array.from({ length: 10 }, (_, i) => ({
+// --- Backgrounds (code uses bg_1 .. bg_16) ---
+// The rpg-battle-system pack ships these at 640x480, which is real art at a
+// sane size. They were previously taken from a different pack's 137x89
+// thumbnails and stretched across 1280x720, which is why the world looked like
+// a smeared blur. 1-6 are day scenes; the matching -night versions are kept as
+// separate keys so darker zones can switch to them.
+const BACKGROUND_FILES = [
+    '1.png', '2.png', '3.png', '4.png', '5.png', '6.png',
+    '7.png', '8.png', '9.png', '10.png',
+    '1-night.png', '2-night.png', '3-night.png',
+    '4-night.png', '5-night.png', '6-night.png',
+];
+
+const BACKGROUNDS = BACKGROUND_FILES.map((file, i) => ({
     key: `bg_${i + 1}`,
-    file: `assets/backgrounds/${i + 1}.png`,
+    file: `assets/backgrounds/${file}`,
     group: 'critical',
 }));
 

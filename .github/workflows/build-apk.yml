@@ -34,9 +34,10 @@ jobs:
       run: npm install
 
     - name: Build web assets
-      # Generates www/ from index.html + src/ + public/assets/ + public/vendor/.
-      # Also verifies every manifest entry exists, so a 404 that would freeze
-      # the game on its loading screen fails here instead of on a device.
+      # Regenerates the embedded-asset module, then builds www/ from
+      # index.html + src/ + public/assets/ + public/vendor/. Also verifies every
+      # manifest entry exists, so a 404 that would freeze the game on its
+      # loading screen fails here instead of on a device.
       run: npm run build
 
     - name: Test asset loader

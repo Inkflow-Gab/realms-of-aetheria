@@ -34,6 +34,8 @@
 // and is unaware this module exists.
 // ============================================
 
+import { EMBEDDED_IMAGES } from '../data/embeddedAssets.js';
+
 const IMAGE_TIMEOUT = 3000;
 const AUDIO_TIMEOUT = 8000;
 
@@ -210,6 +212,24 @@ export class ResilientLoader {
     async loadOne(asset) {
         const audio = this.isAudio(asset);
         const plan = audio ? AUDIO_PLAN : IMAGE_PLAN;
+
+        // Embedded data URLs come first. They need no network at all, so on a
+        // device where the WebView refuses <img> and fetch() requests into
+        // assets/ this is the copy that still arrives -- which is the whole
+        // reason the file exists.
+        if (!audio && EMBEDDED_IMAGES[asset.key]) {
+            this.used.image.add('embedded');
+            try {
+                const ok = await withTimeout(
+                    viaImageElement(this.scene, asset.key, EMBEDDED_IMAGES[asset.key]),
+                    IMAGE_TIMEOUT
+                );
+                if (ok) return { ok: true, transport: 'embedded' };
+            } catch {
+                // Fall through to the network transports below.
+            }
+        }
+
         const url = absolute(asset.file);
         const timeout = audio ? AUDIO_TIMEOUT : IMAGE_TIMEOUT;
         const kind = audio ? 'audio' : 'image';

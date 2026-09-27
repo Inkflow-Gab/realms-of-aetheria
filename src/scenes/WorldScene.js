@@ -116,21 +116,57 @@ export class WorldScene extends Phaser.Scene {
         this.add.image(width / 2, height / 2, bgKey).setDisplaySize(width, height).setDepth(0);
 
         // Ground tiles
-        const tileKey = this.getZoneTile();
-        for (let x = 0; x < GAME_CONFIG.MAP_WIDTH; x++) {
-            for (let y = 0; y < GAME_CONFIG.MAP_HEIGHT; y++) {
-                if (Math.random() > 0.3) {
-                    this.add.image(
-                        x * GAME_CONFIG.TILE_SIZE,
-                        y * GAME_CONFIG.TILE_SIZE,
-                        tileKey
-                    ).setDisplaySize(GAME_CONFIG.TILE_SIZE, GAME_CONFIG.TILE_SIZE).setDepth(1);
-                }
-            }
-        }
+        this.buildGroundLayer();
 
         // Zone decorations
         this.addZoneDecorations();
+    }
+
+    /**
+     * The ground, as a single GPU-tiled object.
+     *
+     * This used to be a nested loop over MAP_WIDTH x MAP_HEIGHT creating one
+     * Image per tile -- 4,800 separate Game Objects. Every one of those costs
+     * its own draw call and its own transform update on every single frame,
+     * which is what was dropping the frame rate on device.
+     *
+     * A TileSprite repeats one texture on the GPU instead, so the entire
+     * ground is a single draw call and a few kilobytes of memory no matter how
+     * large the world is. Zone mood comes from tinting, which is free.
+     */
+    buildGroundLayer() {
+        const worldW = GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE;
+        const worldH = GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE;
+
+        // The 16x16 "middle" tiles are the seamless fillers in this pack, so
+        // they are the right thing to repeat. The 48x96 tiles are full scene
+        // pieces and would look wrong tiled across the whole world.
+        const ground = this.add.tileSprite(0, 0, worldW, worldH, 'tile_Grass_Middle')
+            .setOrigin(0, 0)
+            .setDepth(1);
+
+        // Dark zones are conveyed by tinting the one object rather than by
+        // drawing a second layer.
+        const zoneTint = {
+            cave: 0x8a8a9a,
+            dungeon: 0x6a6a7a,
+            abyss: 0x4a4a5a,
+            mountain: 0x9a9aaa,
+        };
+        if (zoneTint[this.currentZone]) {
+            ground.setTint(zoneTint[this.currentZone]);
+        }
+
+        // Path zones get a second, faint pass so they read as worn ground
+        // without costing another 4,800 objects.
+        if (this.currentZone === 'ruins' || this.currentZone === 'arena') {
+            this.add.tileSprite(0, 0, worldW, worldH, 'tile_Path_Middle')
+                .setOrigin(0, 0)
+                .setDepth(1)
+                .setAlpha(0.35);
+        }
+
+        return ground;
     }
 
     getZoneBackground() {

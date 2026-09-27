@@ -129,10 +129,15 @@ const scene = {
     };
 
     // ===============================================================
-    console.log('\n[1] Critical assets load, and progress never stalls');
+    console.log('\n[1] Critical assets load over HTTP, and progress never stalls');
     // ===============================================================
-    // Manifest paths are relative; point them at the test server.
-    const critical = getCriticalAssets().map((a) => ({ ...a, file: base + '/' + a.file }));
+    // Prefixed keys, so the embedded-data-URL path is skipped and this test
+    // exercises the real network transport against real files. Embedded
+    // delivery has its own check in section 8.
+    const critical = getCriticalAssets().map((a) => ({
+        key: `http_${a.key}`,
+        file: base + '/' + a.file,
+    }));
     console.log(`      critical set: ${critical.length} files`);
 
     const seen = [];
@@ -151,7 +156,7 @@ const scene = {
         seen.every((s, i) => i === 0 || s.done > seen[i - 1].done));
     check('loader did not hang', elapsed < 30000, `took ${elapsed}ms`);
     check('textures registered', textures.size === critical.length - 1,
-        `textures=${textures.size} (slot 0 and 1 share a file)`);
+        `textures=${textures.size} (one audio entry, rest are images)`);
     check('menu music registered as audio', audio.size === 1, `audio=${audio.size}`);
 
     // ===============================================================
@@ -258,7 +263,45 @@ const scene = {
         `loaded=${noBmResult.loaded}`);
 
     // ===============================================================
-    console.log('\n[8] Audio falls back to XHR when fetch is unavailable');
+    console.log('\n[8] Embedded data URLs need no network at all');
+    // ===============================================================
+    // This is the copy that arrives even when the WebView refuses every
+    // network transport, so it gets its own check with fetch disabled.
+    const { EMBEDDED_IMAGES } = await import(
+        'file://' + path.join(ROOT, 'src', 'data', 'embeddedAssets.js')
+    );
+    check('embedded registry is populated', Object.keys(EMBEDDED_IMAGES).length > 0,
+        `${Object.keys(EMBEDDED_IMAGES).length} entries`);
+    check('embedded entries are data URLs',
+        Object.values(EMBEDDED_IMAGES).every((v) => v.startsWith('data:image/png;base64,')));
+
+    const blockedFetch = global.fetch;
+    global.fetch = () => Promise.reject(new TypeError('network down'));
+    const embeddedTextures = new Map();
+    const embeddedScene = {
+        textures: {
+            exists: (k) => embeddedTextures.has(k),
+            addImage: (k, i) => embeddedTextures.set(k, i),
+            addCanvas: (k, c) => embeddedTextures.set(k, c),
+        },
+        cache: { audio: { exists: () => false, add: () => true } },
+    };
+    const embeddedLoader = new ResilientLoader(embeddedScene, {
+        concurrency: 6, deadline: 25000, retries: 0,
+    });
+    const embeds = Object.entries(EMBEDDED_IMAGES)
+        .slice(0, 8)
+        .map(([key, dataUrl]) => ({ key, file: dataUrl }));
+    const embeddedResult = await embeddedLoader.loadAll(embeds);
+    global.fetch = blockedFetch;
+
+    check('images load with the network fully down', embeddedResult.loaded === embeds.length,
+        `loaded=${embeddedResult.loaded}/${embeds.length}`);
+    check('embedded transport was recorded', embeddedLoader.used.image.has('embedded'),
+        `transports: ${[...embeddedLoader.used.image].join(', ') || 'none'}`);
+
+    // ===============================================================
+    console.log('\n[9] Audio falls back to XHR when fetch is unavailable');
     // ===============================================================
     const realFetch = global.fetch;
     global.fetch = () => Promise.reject(new TypeError('fetch blocked'));

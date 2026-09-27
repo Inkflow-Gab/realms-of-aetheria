@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "npx serve . -p 8080",
-    "build": "node scripts/prepare-web.js",
+    "generate:embedded": "node scripts/generate-embedded.js",
+    "build": "npm run generate:embedded && node scripts/prepare-web.js",
     "cap:sync": "npm run build && npx cap sync",
     "cap:copy": "npm run build && npx cap copy",
     "apk:debug": "npm run cap:sync && cd android && ./gradlew assembleDebug",
