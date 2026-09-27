@@ -30,17 +30,20 @@ jobs:
     - name: Setup Capacitor
       run: npx cap sync
 
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-      with:
-        api-level: 34
-        build-tools: 34.0.0
-
     - name: Setup Java
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
+
+    - name: Setup Android SDK
+      run: |
+        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+        # Accept licenses
+        yes | sdkmanager --licenses || true
+        # Install required packages
+        sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" || true
 
     - name: Make gradlew executable
       run: chmod +x android/gradlew
@@ -48,7 +51,7 @@ jobs:
     - name: Build Debug APK
       run: |
         cd android
-        ./gradlew assembleDebug
+        ./gradlew assembleDebug --no-daemon --stacktrace
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
@@ -59,7 +62,7 @@ jobs:
     - name: Build Release APK
       run: |
         cd android
-        ./gradlew assembleRelease
+        ./gradlew assembleRelease --no-daemon --stacktrace
       continue-on-error: true
 
     - name: Upload Release APK
