@@ -15,6 +15,11 @@ export class MainMenuScene extends Phaser.Scene {
         const width = this.cameras.main.width;
         const height = this.cameras.main.height;
 
+        // Dismiss the HTML loader the moment the menu can paint. Leaving it up
+        // after 100% made the watchdog scream "Failed to load" on device even
+        // though every critical asset had already arrived.
+        window.hideLoading?.();
+
         // Background. Guarded so a missing texture shows the dark backdrop
         // instead of Phaser's green "missing image" box.
         if (this.textures.exists('bg_1')) {
@@ -108,14 +113,55 @@ export class MainMenuScene extends Phaser.Scene {
             color: '#666666',
         }).setOrigin(1, 1);
 
-        // Play menu music. Guarded: the track is a critical asset, but if it
-        // failed the menu must still be usable.
-        if (this.cache.audio.exists('music_1')) {
-            this.sound.play('music_1', { loop: true, volume: 0.4 });
-        }
+        // Menu music is deferred (large ogg). Play now if ready, otherwise
+        // poll briefly so the track starts as soon as the background loader
+        // finishes without blocking the menu itself.
+        this.tryPlayMenuMusic();
+        this.time.addEvent({
+            delay: 800,
+            repeat: 20,
+            callback: () => this.tryPlayMenuMusic(),
+        });
+
+        // Ambient sparkles once the VFX sheets land.
+        this.time.delayedCall(1200, () => this.spawnMenuSparkles());
 
         // Stagger the menu in so it assembles instead of snapping into place.
         this.fadeInMenuButtons(buttons);
+    }
+
+    tryPlayMenuMusic() {
+        if (this._menuMusicPlaying) return;
+        if (!this.cache.audio.exists('music_1')) return;
+        try {
+            this.sound.play('music_1', { loop: true, volume: 0.4 });
+            this._menuMusicPlaying = true;
+        } catch {
+            /* Web Audio may still be locked until a tap */
+        }
+    }
+
+    spawnMenuSparkles() {
+        if (!this.textures.exists('fx_sparkle')) return;
+        import('../systems/EffectsSystem.js').then(({ EffectsSystem }) => {
+            EffectsSystem.ensureAnims(this);
+            const width = this.cameras.main.width;
+            const height = this.cameras.main.height;
+            this.time.addEvent({
+                delay: 2200,
+                loop: true,
+                callback: () => {
+                    if (!this.scene.isActive()) return;
+                    EffectsSystem.play(
+                        this,
+                        Phaser.Math.Between(40, width - 40),
+                        Phaser.Math.Between(60, height - 80),
+                        'sparkle',
+                        { scale: 1.1, depth: 5 }
+                    );
+                },
+            });
+        });
     }
 
     /** Fade + slide each button in, top to bottom. */

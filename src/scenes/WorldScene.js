@@ -21,6 +21,10 @@ export class WorldScene extends Phaser.Scene {
 
     init(data) {
         this.loadSave = data?.loadSave || false;
+        // CharacterCreation starts World with { player }. Storing it here so
+        // create() can actually use it -- previously `data` was out of scope
+        // and every New Game silently spawned a blank default hero.
+        this.incomingPlayer = data?.player || null;
     }
 
     create() {
@@ -37,7 +41,7 @@ export class WorldScene extends Phaser.Scene {
                 this.player = new PlayerSystem();
             }
         } else {
-            this.player = data?.player || new PlayerSystem();
+            this.player = this.incomingPlayer || new PlayerSystem();
         }
 
         // === SYSTEMS ===
@@ -262,6 +266,13 @@ export class WorldScene extends Phaser.Scene {
             }, { width: 80, height: 35, fontSize: 14 });
             button.setScrollFactor(0).setDepth(100);
         });
+
+        // Manual save -- auto-save already runs every 30s, but players need a
+        // visible "I saved" action on mobile.
+        const saveBtn = UIComponents.createButton(this, width - 480, 30, 'Save', () => {
+            this.saveGame(false);
+        }, { width: 70, height: 35, fontSize: 14, bgColor: 0x2a3a4a });
+        saveBtn.setScrollFactor(0).setDepth(100);
 
         // === BOTTOM-RIGHT: Action Buttons ===
         this.attackBtn = UIComponents.createButton(this, width - 80, height - 80, 'ATK', () => {
@@ -527,8 +538,12 @@ export class WorldScene extends Phaser.Scene {
         });
     }
 
-    saveGame() {
-        this.saveSystem.save(this.player, { zone: this.currentZone });
+    saveGame(silent = true) {
+        const ok = this.saveSystem.save(this.player, { zone: this.currentZone });
+        if (ok && !silent) {
+            this.showNotification('Game Saved');
+        }
+        return ok;
     }
 
     update(time, delta) {

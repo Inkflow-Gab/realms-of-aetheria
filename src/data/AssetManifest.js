@@ -159,8 +159,12 @@ const HUD = [
 // >>> at a different number. Nothing else needs to change.
 // ============================================
 
+// Menu music used to be critical, but theme-1.ogg is ~900KB and on slower
+// devices it held the entire loading screen hostage even after every image
+// was already ready. It now loads with the rest of the audio; the menu plays
+// it as soon as it lands (see MainMenuScene).
 const MENU_MUSIC = [
-    { key: 'music_1', file: 'assets/music/theme-1.ogg', group: 'critical' },
+    { key: 'music_1', file: 'assets/music/theme-1.ogg', group: 'audio' },
 ];
 
 // Remaining themes, loaded in the background after the menu appears.
@@ -262,6 +266,13 @@ export const NAMED_SOUND_KEYS = {
     whoosh: 'sfx_whoosh_1',
 };
 
+// Combat VFX sheets (spritesheets, loaded via Phaser after images land).
+// Listed here so prepare-web verifies they ship in the APK; the EffectsSystem
+// registers the frame sizes when the deferred loader finishes.
+import { FX_MANIFEST } from '../systems/EffectsSystem.js';
+
+const FX_ASSETS = FX_MANIFEST.map(({ key, file, group }) => ({ key, file, group }));
+
 export const ASSET_MANIFEST = [
     ...CHARACTERS,
     ...BACKGROUNDS,
@@ -271,6 +282,7 @@ export const ASSET_MANIFEST = [
     ...NPCS,
     ...ITEMS,
     ...TILES,
+    ...FX_ASSETS,
     ...MENU_MUSIC,
     ...BACKGROUND_MUSIC,
     ...SFX,

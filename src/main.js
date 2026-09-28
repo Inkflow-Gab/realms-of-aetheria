@@ -17,6 +17,24 @@ import { ShopScene } from './scenes/ShopScene.js';
 import { SettingsScene } from './scenes/SettingsScene.js';
 
 // ============================================
+// IMMERSIVE FULLSCREEN
+// ============================================
+// System bars / cutout are handled natively in MainActivity + styles.xml.
+// This project ships vanilla ES modules (no bundler), so @capacitor/*
+// packages are not importable from the WebView. Do not import them here.
+function enterImmersive() {
+    // Re-assert layout after returning from the background.
+    try {
+        document.documentElement.style.background = '#0a0a1a';
+        document.body.style.background = '#0a0a1a';
+    } catch {
+        /* ignore */
+    }
+}
+
+enterImmersive();
+
+// ============================================
 // PHASER GAME CONFIGURATION
 // ============================================
 
@@ -34,10 +52,13 @@ const config = {
         },
     },
     scale: {
-        mode: Phaser.Scale.FIT,
+        // RESIZE fills the real device screen. FIT left black letterbox bars
+        // on modern wide phones -- the "black thing" in the screenshot corner.
+        mode: Phaser.Scale.RESIZE,
         autoCenter: Phaser.Scale.CENTER_BOTH,
         width: GAME_CONFIG.WIDTH,
         height: GAME_CONFIG.HEIGHT,
+        expandParent: true,
         orientation: Phaser.Scale.Orientation.LANDSCAPE,
     },
     input: {
@@ -46,6 +67,13 @@ const config = {
     render: {
         pixelArt: false,
         antialias: true,
+        roundPixels: true,
+        powerPreference: 'high-performance',
+    },
+    fps: {
+        target: 60,
+        min: 30,
+        forceSetTimeOut: false,
     },
     scene: [
         BootScene,
@@ -67,31 +95,41 @@ const config = {
 // START GAME
 // ============================================
 
-// Let the loading screen know the engine is alive, so its watchdog can stop
-// claiming "Starting up..." while Phaser is actually booting.
 window.__phaserStarted = true;
 window.setLoadingMessage?.(1, 'Starting game engine...');
 
-// Phaser is loaded from a CDN <script> tag above. If that failed (offline
-// first-run, blocked CDN) there is no engine and the loader would sit at 0%
-// forever, so bail out with a readable message instead.
 if (typeof Phaser === 'undefined') {
     window.showLoadingError?.(
         'Could not load the Phaser game engine (phaser.min.js). ' +
-        'Check your internet connection the first time the app is opened, ' +
-        'then restart the app.'
+        'Reinstall the app so the bundled engine is restored.'
     );
-    throw new Error('Phaser failed to load from CDN');
+    throw new Error('Phaser failed to load');
 }
 
 const game = new Phaser.Game(config);
 
-// Prevent default touch behaviors
+// Keep canvas locked to the visible viewport after orientation / inset changes.
+const refit = () => {
+    try {
+        game.scale.resize(window.innerWidth, window.innerHeight);
+        game.scale.refresh();
+    } catch {
+        /* game may not be ready */
+    }
+};
+window.addEventListener('resize', refit);
+window.addEventListener('orientationchange', () => setTimeout(refit, 80));
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+        enterImmersive();
+        refit();
+    }
+});
+
 document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('dblclick', (e) => e.preventDefault());
 
-// Handle visibility change (auto-save)
 document.addEventListener('visibilitychange', () => {
     if (document.hidden && game.scene.isActive('World')) {
         const worldScene = game.scene.getScene('World');
@@ -101,5 +139,4 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
-// Export for debugging
 window.game = game;

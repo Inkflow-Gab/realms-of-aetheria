@@ -25,7 +25,7 @@ import { getCriticalAssets, getDeferredAssets } from '../data/AssetManifest.js';
 import { ResilientLoader, absolute } from '../systems/ResilientLoader.js';
 
 /** How long we wait for critical assets before starting the game regardless. */
-const CRITICAL_DEADLINE = 8000;
+const CRITICAL_DEADLINE = 12000;
 
 export class PreloadScene extends Phaser.Scene {
     constructor() {
@@ -96,6 +96,9 @@ export class PreloadScene extends Phaser.Scene {
 
         // Start the game. The menu is fully playable without any texture, so
         // whatever did or did not load, the player is never stuck here.
+        // Hide the HTML overlay here as well as in MainMenu -- if either path
+        // is skipped the watchdog used to show a false "Failed to load".
+        window.hideLoading?.();
         this.scene.start('MainMenu');
         this.loadDeferredAssets(loader);
     }

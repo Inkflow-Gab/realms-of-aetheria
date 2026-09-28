@@ -44,8 +44,8 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Bump on every release. Android refuses an "update" whose
         // versionCode is not higher than the installed one.
-        versionCode 2
-        versionName "1.0.1"
+        versionCode 3
+        versionName "1.0.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'

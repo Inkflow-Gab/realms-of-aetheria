@@ -155,9 +155,11 @@ const scene = {
     check('progress is strictly increasing',
         seen.every((s, i) => i === 0 || s.done > seen[i - 1].done));
     check('loader did not hang', elapsed < 30000, `took ${elapsed}ms`);
-    check('textures registered', textures.size === critical.length - 1,
-        `textures=${textures.size} (one audio entry, rest are images)`);
-    check('menu music registered as audio', audio.size === 1, `audio=${audio.size}`);
+    // Menu music was moved out of the critical set so a ~900KB ogg cannot
+    // hold the loading screen hostage. Critical is now images only.
+    check('textures registered', textures.size === critical.length,
+        `textures=${textures.size} (critical set is images-only)`);
+    check('critical set has no audio', audio.size === 0, `audio=${audio.size}`);
 
     // ===============================================================
     console.log('\n[2] A request that never responds cannot wedge the queue');

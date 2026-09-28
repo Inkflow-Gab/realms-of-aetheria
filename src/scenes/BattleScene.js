@@ -2,10 +2,14 @@
 // REALMS OF AETHERIA - BATTLE SCENE
 // ============================================
 
-import { MONSTERS, MONSTER_SKILLS } from '../data/Monsters.js';
+import { MONSTERS } from '../data/Monsters.js';
 import { SKILLS } from '../data/Skills.js';
+import { ITEMS } from '../data/Items.js';
 import { UIComponents } from '../ui/UIComponents.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
+import { AudioSystem } from '../systems/AudioSystem.js';
+import { EffectsSystem } from '../systems/EffectsSystem.js';
+import { QuestSystem } from '../systems/QuestSystem.js';
 
 export class BattleScene extends Phaser.Scene {
     constructor() {
@@ -23,45 +27,93 @@ export class BattleScene extends Phaser.Scene {
         const width = this.cameras.main.width;
         const height = this.cameras.main.height;
 
+        // Local audio + quest systems so battle never depends on a paused World
+        // scene holding them (the previous code called this.audio with nothing
+        // initialised and crashed the first Attack tap).
+        this.audio = new AudioSystem();
+        this.audio.init(this);
+        this.questSystem = new QuestSystem(this.player);
+        EffectsSystem.ensureAnims(this);
+
         // Background
-        this.add.image(width / 2, height / 2, 'bg_5').setDisplaySize(width, height);
+        const bgKey = this.textures.exists('bg_5') ? 'bg_5' : null;
+        if (bgKey) {
+            this.add.image(width / 2, height / 2, bgKey).setDisplaySize(width, height);
+        }
         const overlay = this.add.graphics();
         overlay.fillStyle(0x0a0a1a, 0.7);
         overlay.fillRect(0, 0, width, height);
 
         // === MONSTER DISPLAY ===
         const monsterData = MONSTERS[this.monsterId];
-        this.monsterDisplay = this.add.image(width / 2 + 200, height / 2 - 50, `monster_${monsterData.sprite.split('/').pop().replace('.png', '')}`)
-            .setScale((monsterData.scale || 1) * 2)
-            .setDepth(10);
+        const monsterKey = `monster_${String(monsterData.sprite).split('/').pop().replace('.png', '')}`;
+        const monsterX = width / 2 + Math.min(220, width * 0.18);
+        const monsterY = height / 2 - 50;
+        if (this.textures.exists(monsterKey)) {
+            this.monsterDisplay = this.add.image(monsterX, monsterY, monsterKey)
+                .setScale((monsterData.scale || 1) * 2)
+                .setDepth(10);
+        } else {
+            this.monsterDisplay = this.add.rectangle(monsterX, monsterY, 80, 80, monsterData.tint || 0xe74c3c)
+                .setDepth(10);
+        }
 
-        if (monsterData.tint) {
+        if (monsterData.tint && this.monsterDisplay.setTint) {
             this.monsterDisplay.setTint(monsterData.tint);
         }
 
         // Monster name & level
-        this.add.text(width / 2 + 200, height / 2 - 200, `${monsterData.name} Lv.${monsterData.level}`, {
+        this.add.text(this.monsterDisplay.x, height / 2 - 200, `${monsterData.name} Lv.${monsterData.level}`, {
             fontFamily: 'Georgia, serif',
             fontSize: '24px',
             color: '#e74c3c',
         }).setOrigin(0.5);
 
         // Monster HP bar
-        this.monsterHpBarUI = UIComponents.createBar(this, width / 2 + 100, height / 2 - 170, 200, 20, monsterData.hp, monsterData.hp, GAME_CONFIG.COLORS.HP);
+        this.monsterHpBarUI = UIComponents.createBar(
+            this,
+            this.monsterDisplay.x - 100,
+            height / 2 - 170,
+            200, 20,
+            monsterData.hp, monsterData.hp,
+            GAME_CONFIG.COLORS.HP
+        );
 
         // === PLAYER DISPLAY ===
-        this.playerDisplay = this.add.image(width / 2 - 200, height / 2 - 50, `char_${this.player.avatarIndex}`)
-            .setScale(2)
-            .setDepth(10);
+        const charKey = `char_${this.player.avatarIndex}`;
+        const playerX = width / 2 - Math.min(220, width * 0.18);
+        const playerY = height / 2 - 50;
+        if (this.textures.exists(charKey)) {
+            this.playerDisplay = this.add.image(playerX, playerY, charKey)
+                .setScale(2)
+                .setDepth(10);
+        } else {
+            this.playerDisplay = this.add.rectangle(playerX, playerY, 72, 72, 0xc9a84c)
+                .setDepth(10);
+        }
 
-        this.add.text(width / 2 - 200, height / 2 - 200, `${this.player.name} Lv.${this.player.level}`, {
+        this.add.text(this.playerDisplay.x, height / 2 - 200, `${this.player.name} Lv.${this.player.level}`, {
             fontFamily: 'Georgia, serif',
             fontSize: '24px',
             color: '#c9a84c',
         }).setOrigin(0.5);
 
-        this.playerHpBar = UIComponents.createBar(this, width / 2 - 300, height / 2 - 170, 200, 20, this.player.hp, this.player.maxHp, GAME_CONFIG.COLORS.HP);
-        this.playerMpBar = UIComponents.createBar(this, width / 2 - 300, height / 2 - 145, 200, 14, this.player.mp, this.player.maxMp, GAME_CONFIG.COLORS.MP);
+        this.playerHpBar = UIComponents.createBar(
+            this,
+            this.playerDisplay.x - 100,
+            height / 2 - 170,
+            200, 20,
+            this.player.hp, this.player.maxHp,
+            GAME_CONFIG.COLORS.HP
+        );
+        this.playerMpBar = UIComponents.createBar(
+            this,
+            this.playerDisplay.x - 100,
+            height / 2 - 145,
+            200, 14,
+            this.player.mp, this.player.maxMp,
+            GAME_CONFIG.COLORS.MP
+        );
 
         // === COMBAT LOG ===
         this.combatLog = [];
@@ -69,7 +121,7 @@ export class BattleScene extends Phaser.Scene {
             fontFamily: 'Georgia, serif',
             fontSize: '14px',
             color: '#f0e6d3',
-            wordWrap: { width: 400 },
+            wordWrap: { width: Math.min(400, width * 0.4) },
             lineSpacing: 4,
         });
 
@@ -83,23 +135,19 @@ export class BattleScene extends Phaser.Scene {
         this.turnCooldown = false;
 
         this.addLog(`A wild ${monsterData.name} appears!`);
+        EffectsSystem.play(this, this.monsterDisplay.x, this.monsterDisplay.y, 'sparkle', { scale: 2 });
 
-        // Play battle music
-        if (this.sound.get('music_battle')) {
-            this.sound.play('music_battle', { loop: true, volume: 0.4 });
-        }
+        this.audio.playMusic('battle');
     }
 
     createActionButtons() {
         const width = this.cameras.main.width;
         const height = this.cameras.main.height;
 
-        // Attack button
         UIComponents.createButton(this, width / 2 - 200, height - 80, 'Attack', () => {
             this.playerAttack();
         }, { width: 120, height: 50, fontSize: 18, bgColor: 0x8b0000 });
 
-        // Skill buttons
         const skills = this.player.skills.slice(0, 4);
         skills.forEach((skillId, i) => {
             const skill = SKILLS[skillId];
@@ -110,12 +158,10 @@ export class BattleScene extends Phaser.Scene {
             }, { width: 90, height: 50, fontSize: 12, bgColor: 0x2a2a6a });
         });
 
-        // Potion button
         UIComponents.createButton(this, width / 2 + 250, height - 80, 'Potion', () => {
             this.usePotion();
         }, { width: 100, height: 50, fontSize: 16, bgColor: 0x2a4a2a });
 
-        // Flee button
         UIComponents.createButton(this, width - 80, height - 80, 'Flee', () => {
             this.flee();
         }, { width: 80, height: 50, fontSize: 16, bgColor: 0x4a2a2a });
@@ -125,7 +171,6 @@ export class BattleScene extends Phaser.Scene {
         if (this.turnCooldown || !this.inCombat) return;
         this.turnCooldown = true;
 
-        // Animate player attack
         this.tweens.add({
             targets: this.playerDisplay,
             x: this.playerDisplay.x + 50,
@@ -143,13 +188,20 @@ export class BattleScene extends Phaser.Scene {
         this.addLog(`${this.player.name} attacks for ${finalDamage}${isCrit ? ' CRITICAL!' : '!'}`);
         this.audio.play(isCrit ? 'crit' : 'attack');
 
-        // Damage number
+        EffectsSystem.play(
+            this,
+            this.monsterDisplay.x,
+            this.monsterDisplay.y,
+            isCrit ? 'crit' : 'hit',
+            { scale: isCrit ? 2.2 : 1.7 }
+        );
+        EffectsSystem.shake(this, isCrit ? 0.01 : 0.004, isCrit ? 180 : 100);
+
         this.showDamageNumber(this.monsterDisplay.x, this.monsterDisplay.y - 50, finalDamage, isCrit);
 
         if (this.monsterCurrentHp <= 0) {
             this.onMonsterDefeated();
         } else {
-            // Monster turn
             this.time.delayedCall(1000, () => {
                 this.monsterAttack();
             });
@@ -169,7 +221,6 @@ export class BattleScene extends Phaser.Scene {
         this.player.mp -= skill.mpCost;
         this.playerMpBar.updateValue(this.player.mp, this.player.maxMp);
 
-        // Animate
         this.tweens.add({
             targets: this.playerDisplay,
             scaleX: 2.2,
@@ -185,6 +236,12 @@ export class BattleScene extends Phaser.Scene {
 
         this.addLog(`${this.player.name} uses ${skill.name} for ${finalDamage}!`);
         this.audio.play('magic');
+
+        const fxKind = /lightning|bolt|thunder/i.test(skill.name) ? 'lightning'
+            : /heal|holy|divine/i.test(skill.name) ? 'heal'
+            : 'crit';
+        EffectsSystem.play(this, this.monsterDisplay.x, this.monsterDisplay.y, fxKind, { scale: 2 });
+        EffectsSystem.shake(this, 0.008, 140);
 
         this.showDamageNumber(this.monsterDisplay.x, this.monsterDisplay.y - 50, finalDamage, false);
 
@@ -202,7 +259,6 @@ export class BattleScene extends Phaser.Scene {
 
         const monsterData = MONSTERS[this.monsterId];
 
-        // Animate
         this.tweens.add({
             targets: this.monsterDisplay,
             x: this.monsterDisplay.x - 50,
@@ -216,6 +272,9 @@ export class BattleScene extends Phaser.Scene {
 
         this.addLog(`${monsterData.name} attacks for ${damage}!`);
         this.audio.play('hit');
+
+        EffectsSystem.play(this, this.playerDisplay.x, this.playerDisplay.y, 'hit', { scale: 1.5 });
+        EffectsSystem.shake(this, 0.006, 110);
 
         this.showDamageNumber(this.playerDisplay.x, this.playerDisplay.y - 50, damage, false, true);
 
@@ -233,6 +292,7 @@ export class BattleScene extends Phaser.Scene {
             this.playerHpBar.updateValue(this.player.hp, this.player.maxHp);
             this.addLog('Used Health Potion!');
             this.audio.play('potion');
+            EffectsSystem.play(this, this.playerDisplay.x, this.playerDisplay.y, 'heal', { scale: 1.8 });
             this.turnCooldown = true;
             this.time.delayedCall(1000, () => this.monsterAttack());
         } else {
@@ -258,13 +318,11 @@ export class BattleScene extends Phaser.Scene {
         this.addLog(`${monsterData.name} defeated!`);
         this.addLog(`Gained ${monsterData.exp} EXP and ${monsterData.gold[0]}-${monsterData.gold[1]} Gold!`);
 
-        // Rewards
         const leveled = this.player.gainExp(monsterData.exp);
         const goldGain = Math.floor(Math.random() * (monsterData.gold[1] - monsterData.gold[0] + 1)) + monsterData.gold[0];
         this.player.gold += goldGain;
         this.player.killCount++;
 
-        // Drops
         if (monsterData.drops) {
             for (const drop of monsterData.drops) {
                 if (Math.random() < drop.chance) {
@@ -274,10 +332,10 @@ export class BattleScene extends Phaser.Scene {
             }
         }
 
-        // Quest progress
         this.questSystem?.updateQuest('kill', this.monsterId);
 
-        // Victory animation
+        EffectsSystem.play(this, this.monsterDisplay.x, this.monsterDisplay.y, 'crit', { scale: 2.4 });
+
         this.tweens.add({
             targets: this.monsterDisplay,
             alpha: 0,
@@ -287,6 +345,7 @@ export class BattleScene extends Phaser.Scene {
         });
 
         this.audio.play('victory');
+        this.audio.play('fanfare');
 
         if (leveled) {
             this.time.delayedCall(500, () => {
@@ -302,7 +361,6 @@ export class BattleScene extends Phaser.Scene {
         this.addLog('You have been defeated...');
         this.audio.play('defeat');
 
-        // Lose some gold
         const goldLoss = Math.floor(this.player.gold * 0.1);
         this.player.gold -= goldLoss;
         this.player.deathCount++;
@@ -319,6 +377,8 @@ export class BattleScene extends Phaser.Scene {
     showLevelUp() {
         const width = this.cameras.main.width;
         const height = this.cameras.main.height;
+
+        EffectsSystem.play(this, width / 2, height / 2, 'sparkle', { scale: 3, depth: 220 });
 
         const levelUpText = this.add.text(width / 2, height / 2, 'LEVEL UP!', {
             fontFamily: 'Georgia, serif',
