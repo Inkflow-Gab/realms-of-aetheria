@@ -2,7 +2,7 @@
 // REALMS OF AETHERIA - INVENTORY SCENE
 // ============================================
 
-import { ITEMS } from '../data/Items.js';
+import { ITEMS, getItemCategory, describeWeaponPerk, canClassEquipWeapon } from '../data/Items.js';
 import { UIComponents } from '../ui/UIComponents.js';
 
 export class InventoryScene extends Phaser.Scene {
@@ -140,6 +140,15 @@ export class InventoryScene extends Phaser.Scene {
         let text = `${item.name}\n`;
         text += `Rarity: ${item.rarity}\n`;
         text += `Type: ${item.type}\n`;
+        const cat = getItemCategory(item);
+        if (cat) text += `Category: ${cat}\n`;
+        if (item.perk) {
+            text += `\nWeapon perk: ${describeWeaponPerk(item.perk)}\n`;
+        }
+        if (cat === 'weapon' && this.player?.class) {
+            const ok = canClassEquipWeapon(this.player.class, item.type);
+            text += ok ? '\nClass: can equip\n' : '\nClass: wrong weapon type\n';
+        }
         if (item.stats) {
             text += '\nStats:\n';
             for (const [stat, val] of Object.entries(item.stats)) {
@@ -170,8 +179,16 @@ export class InventoryScene extends Phaser.Scene {
         menuBg.strokeRoundedRect(width / 2 - 100, height / 2 - 80, 200, 160, 10);
 
         const actions = [];
-        if (item.category === 'weapon' || item.category === 'armor' || item.category === 'accessory') {
-            actions.push({ label: 'Equip', callback: () => { this.player.equip(item.id); this.scene.restart({ player: this.player }); } });
+        const cat = getItemCategory(item);
+        if (cat === 'weapon' || cat === 'armor' || cat === 'accessory') {
+            actions.push({
+                label: 'Equip',
+                callback: () => {
+                    const ok = this.player.equip(item.id);
+                    if (!ok) this.showItemDetails({ ...item, desc: (item.desc || '') + '\n\n(Could not equip — check class or slot.)' });
+                    else this.scene.restart({ player: this.player });
+                },
+            });
         }
         if (item.category === 'consumable') {
             actions.push({ label: 'Use', callback: () => { this.player.useItem(item.id); this.scene.restart({ player: this.player }); } });

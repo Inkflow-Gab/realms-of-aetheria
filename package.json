@@ -1,6 +1,6 @@
 {
   "name": "realms-of-aetheria",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "Realms of Aetheria - A Full Mobile RPG",
   "main": "index.js",
   "scripts": {

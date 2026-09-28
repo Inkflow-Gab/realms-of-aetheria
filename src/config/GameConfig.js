@@ -9,7 +9,7 @@ export const GAME_CONFIG = {
 
     // Shown on the main menu. Keep in sync with versionName in
     // android/app/build.gradle and package.json.
-    VERSION: '1.0.2',
+    VERSION: '1.0.4',
 
     // Physics
     GRAVITY: 800,
@@ -172,22 +172,26 @@ export const CLASSES = {
 
 // Traits
 export const TRAITS = {
-    BRAVE: { id: 'brave', name: 'Brave', desc: '+15% damage, -10% defense', effect: { atkMult: 1.15, defMult: 0.9 } },
-    TOUGH: { id: 'tough', name: 'Tough', desc: '+25% HP, -10% speed', effect: { hpMult: 1.25, spdMult: 0.9 } },
-    SWIFT: { id: 'swift', name: 'Swift', desc: '+20% speed, -5% defense', effect: { spdMult: 1.2, defMult: 0.95 } },
-    WISE: { id: 'wise', name: 'Wise', desc: '+30% MP, +10% magic damage', effect: { mpMult: 1.3, magicMult: 1.1 } },
-    LUCKY: { id: 'lucky', name: 'Lucky', desc: '+15% crit, +10% gold find', effect: { critMult: 1.15, goldMult: 1.1 } },
-    VAMPIRE: { id: 'vampire', name: 'Vampire', desc: 'Lifesteal 8% of damage', effect: { lifesteal: 0.08 } },
-    THORNS: { id: 'thorns', name: 'Thorns', desc: 'Reflect 15% damage taken', effect: { thorns: 0.15 } },
-    EAGLE_EYE: { id: 'eagle_eye', name: 'Eagle Eye', desc: '+10% hit rate, +5% crit', effect: { hitMult: 1.1, critMult: 1.05 } },
-    IRON_WILL: { id: 'iron_will', name: 'Iron Will', desc: 'Stun resist +50%, +10% defense', effect: { stunResist: 0.5, defMult: 1.1 } },
-    ARCANE_MIND: { id: 'arcane_mind', name: 'Arcane Mind', desc: 'Skills cost 15% less MP', effect: { mpCostMult: 0.85 } },
-    BERSERK: { id: 'berserk', name: 'Berserk', desc: '+25% damage when HP < 30%', effect: { berserkThreshold: 0.3, berserkMult: 1.25 } },
-    GUARDIAN: { id: 'guardian', name: 'Guardian', desc: '+20% defense, -5% speed', effect: { defMult: 1.2, spdMult: 0.95 } },
-    GOLD_DIGGER: { id: 'gold_digger', name: 'Gold Digger', desc: '+30% gold from all sources', effect: { goldMult: 1.3 } },
-    LOOTER: { id: 'looter', name: 'Looter', desc: '+15% item drop chance', effect: { dropMult: 1.15 } },
-    REGENERATOR: { id: 'regenerator', name: 'Regenerator', desc: 'Regen 2% HP per second', effect: { regen: 0.02 } },
-    MANA_SHIELD: { id: 'mana_shield', name: 'Mana Shield', desc: '30% chance to negate magic damage', effect: { magicResist: 0.3 } },
+    BRAVE: { id: 'brave', name: 'Brave', category: 'Combat', tier: 'common', desc: '+15% damage, -10% defense', effect: { atkMult: 1.15, defMult: 0.9 } },
+    TOUGH: { id: 'tough', name: 'Tough', category: 'Defense', tier: 'common', desc: '+25% HP, -10% speed', effect: { hpMult: 1.25, spdMult: 0.9 } },
+    SWIFT: { id: 'swift', name: 'Swift', category: 'Combat', tier: 'common', desc: '+20% speed, -5% defense', effect: { spdMult: 1.2, defMult: 0.95 } },
+    WISE: { id: 'wise', name: 'Wise', category: 'Magic', tier: 'common', desc: '+30% MP, +10% magic damage', effect: { mpMult: 1.3, magicMult: 1.1 } },
+    LUCKY: { id: 'lucky', name: 'Lucky', category: 'Utility', tier: 'common', desc: '+15% crit, +10% gold find', effect: { critMult: 1.15, goldMult: 1.1 } },
+    VAMPIRE: { id: 'vampire', name: 'Vampire', category: 'Combat', tier: 'rare', desc: 'Lifesteal 8% of damage dealt', effect: { lifesteal: 0.08 } },
+    THORNS: { id: 'thorns', name: 'Thorns', category: 'Defense', tier: 'rare', desc: 'Reflect 15% damage taken', effect: { thorns: 0.15 } },
+    EAGLE_EYE: { id: 'eagle_eye', name: 'Eagle Eye', category: 'Combat', tier: 'common', desc: '+10% hit rate, +5% crit', effect: { hitMult: 1.1, critMult: 1.05 } },
+    IRON_WILL: { id: 'iron_will', name: 'Iron Will', category: 'Defense', tier: 'rare', desc: 'Stun resist +50%, +10% defense', effect: { stunResist: 0.5, defMult: 1.1 } },
+    ARCANE_MIND: { id: 'arcane_mind', name: 'Arcane Mind', category: 'Magic', tier: 'rare', desc: 'Skills cost 15% less MP', effect: { mpCostMult: 0.85 } },
+    BERSERK: { id: 'berserk', name: 'Berserk', category: 'Combat', tier: 'epic', desc: '+25% damage when HP < 30%', effect: { berserkThreshold: 0.3, berserkMult: 1.25 } },
+    GUARDIAN: { id: 'guardian', name: 'Guardian', category: 'Defense', tier: 'common', desc: '+20% defense, -5% speed', effect: { defMult: 1.2, spdMult: 0.95 } },
+    GOLD_DIGGER: { id: 'gold_digger', name: 'Gold Digger', category: 'Utility', tier: 'common', desc: '+30% gold from all sources', effect: { goldMult: 1.3 } },
+    LOOTER: { id: 'looter', name: 'Looter', category: 'Utility', tier: 'common', desc: '+15% item drop chance', effect: { dropMult: 1.15 } },
+    REGENERATOR: { id: 'regenerator', name: 'Regenerator', category: 'Defense', tier: 'rare', desc: 'Regen 2% max HP per second in combat', effect: { regen: 0.02 } },
+    MANA_SHIELD: { id: 'mana_shield', name: 'Mana Shield', category: 'Magic', tier: 'epic', desc: '30% chance to negate magic damage', effect: { magicResist: 0.3 } },
+    PHOENIX: { id: 'phoenix', name: 'Phoenix', category: 'Defense', tier: 'legendary', desc: 'Once per battle survive a killing blow at 1 HP', effect: { cheatDeath: 1 } },
+    SHADOW: { id: 'shadow', name: 'Shadow', category: 'Combat', tier: 'epic', desc: '+12% dodge, +8% crit from stealth', effect: { dodgeMult: 1.12, critMult: 1.08 } },
+    CHAMPION: { id: 'champion', name: 'Champion', category: 'Combat', tier: 'rare', desc: '+10% damage and +10% defense', effect: { atkMult: 1.1, defMult: 1.1 } },
+    ALCHEMIST: { id: 'alchemist', name: 'Alchemist', category: 'Utility', tier: 'rare', desc: 'Potions heal 25% more', effect: { potionMult: 1.25 } },
 };
 
 // XP curve

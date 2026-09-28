@@ -3,6 +3,7 @@
 // ============================================
 
 import { UIComponents } from '../ui/UIComponents.js';
+import { layout, addBetaBadge } from '../ui/Layout.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 
@@ -12,29 +13,18 @@ export class MainMenuScene extends Phaser.Scene {
     }
 
     create() {
-        const width = this.cameras.main.width;
-        const height = this.cameras.main.height;
-
-        // Dismiss the HTML loader the moment the menu can paint. Leaving it up
-        // after 100% made the watchdog scream "Failed to load" on device even
-        // though every critical asset had already arrived.
+        const L = layout(this);
         window.hideLoading?.();
 
-        // Background. Guarded so a missing texture shows the dark backdrop
-        // instead of Phaser's green "missing image" box.
         if (this.textures.exists('bg_1')) {
-            this.add.image(width / 2, height / 2, 'bg_1')
-                .setDisplaySize(width, height)
-                .setAlpha(0);
+            this.add.image(L.cx, L.cy, 'bg_1').setDisplaySize(L.w, L.h).setAlpha(0);
         }
-        this.add.rectangle(width / 2, height / 2, width, height, 0x0a0a1a, 1);
+        this.add.rectangle(L.cx, L.cy, L.w, L.h, 0x0a0a1a, 1);
 
-        // Dark overlay
-        const overlay = this.add.graphics();
-        overlay.fillStyle(0x0a0a1a, 0.6);
-        overlay.fillRect(0, 0, width, height);
+        const shade = this.add.graphics();
+        shade.fillStyle(0x0a0a1a, 0.55);
+        shade.fillRect(0, 0, L.w, L.h);
 
-        // Fade the backdrop in so the handoff from the loading screen is smooth.
         if (this.textures.exists('bg_1')) {
             this.tweens.add({
                 targets: this.children.list[0],
@@ -44,89 +34,89 @@ export class MainMenuScene extends Phaser.Scene {
             });
         }
 
-        // Title
-        const title = this.add.text(width / 2, 100, 'REALMS OF AETHERIA', {
+        addBetaBadge(this, 'top-left');
+
+        const titleSize = L.font(L.h < 420 ? 34 : 52);
+        const title = this.add.text(L.cx, L.y(0.14), 'REALMS OF AETHERIA', {
             fontFamily: 'Georgia, serif',
-            fontSize: '52px',
+            fontSize: `${titleSize}px`,
             color: '#c9a84c',
             stroke: '#000000',
             strokeThickness: 4,
+            align: 'center',
         }).setOrigin(0.5);
 
         this.tweens.add({
             targets: title,
-            y: 105,
+            y: title.y + 5,
             duration: 2000,
             yoyo: true,
             repeat: -1,
             ease: 'Sine.easeInOut',
         });
 
-        // Subtitle
-        this.add.text(width / 2, 160, 'A Mobile RPG Adventure', {
+        this.add.text(L.cx, title.y + titleSize * 0.75, 'A Mobile RPG Adventure', {
             fontFamily: 'Georgia, serif',
-            fontSize: '20px',
+            fontSize: `${L.font(18)}px`,
             color: '#f0e6d3',
         }).setOrigin(0.5);
 
-        // Menu buttons
         const saveSystem = new SaveSystem();
         const hasSave = saveSystem.hasSave;
         const saveInfo = SaveSystem.getSaveInfo();
 
-        // Collected so they can be staggered in after the scene appears.
-        const buttons = [];
-        let btnY = 280;
-
-        // New Game
-        buttons.push(UIComponents.createButton(this, width / 2, btnY, 'New Game', () => {
-            this.scene.start('CharacterCreation');
-        }, { width: 280, height: 55, fontSize: 22 }));
-
-        btnY += 70;
-
-        // Continue
+        const btnW = Math.min(320, L.w * 0.55);
+        const btnH = Math.max(44, L.font(48));
+        const gap = Math.max(12, L.font(18));
+        const entries = [
+            { label: 'New Game', variant: 'primary', fn: () => this.scene.start('CharacterCreation') },
+        ];
         if (hasSave) {
-            buttons.push(UIComponents.createButton(this, width / 2, btnY, `Continue (Lv.${saveInfo?.level || 1})`, () => {
-                this.scene.start('World', { loadSave: true });
-            }, { width: 280, height: 55, fontSize: 22, bgColor: 0x2a4a2a }));
-
-            btnY += 70;
+            entries.push({
+                label: `Continue (Lv.${saveInfo?.level || 1})`,
+                variant: 'default',
+                bgColor: 0x2a4a2a,
+                fn: () => this.scene.start('World', { loadSave: true }),
+            });
         }
+        entries.push(
+            { label: 'Settings', variant: 'ghost', fn: () => this.scene.start('Settings') },
+            { label: 'Credits', variant: 'ghost', fn: () => this.showCredits() },
+        );
 
-        // Settings
-        buttons.push(UIComponents.createButton(this, width / 2, btnY, 'Settings', () => {
-            this.scene.start('Settings');
-        }, { width: 280, height: 55, fontSize: 22 }));
+        // Center the stack vertically in the lower 2/3 so nothing clips.
+        const stackH = entries.length * btnH + (entries.length - 1) * gap;
+        let btnY = Phaser.Math.Clamp(
+            L.cy + L.font(20),
+            L.y(0.38),
+            L.h - stackH / 2 - L.pad * 2
+        );
 
-        btnY += 70;
+        const buttons = entries.map((entry) => {
+            const btn = UIComponents.createButton(this, L.cx, btnY, entry.label, entry.fn, {
+                width: btnW,
+                height: btnH,
+                fontSize: L.font(20),
+                variant: entry.variant,
+                bgColor: entry.bgColor,
+            });
+            btnY += btnH + gap;
+            return btn;
+        });
 
-        // Credits
-        buttons.push(UIComponents.createButton(this, width / 2, btnY, 'Credits', () => {
-            this.showCredits();
-        }, { width: 280, height: 55, fontSize: 22 }));
-
-        // Version
-        this.add.text(width - 10, height - 10, `v${GAME_CONFIG.VERSION}`, {
+        this.add.text(L.w - L.pad, L.h - L.pad, `v${GAME_CONFIG.VERSION}`, {
             fontFamily: 'Georgia, serif',
-            fontSize: '12px',
-            color: '#666666',
+            fontSize: `${L.font(12)}px`,
+            color: '#888888',
         }).setOrigin(1, 1);
 
-        // Menu music is deferred (large ogg). Play now if ready, otherwise
-        // poll briefly so the track starts as soon as the background loader
-        // finishes without blocking the menu itself.
         this.tryPlayMenuMusic();
         this.time.addEvent({
             delay: 800,
             repeat: 20,
             callback: () => this.tryPlayMenuMusic(),
         });
-
-        // Ambient sparkles once the VFX sheets land.
         this.time.delayedCall(1200, () => this.spawnMenuSparkles());
-
-        // Stagger the menu in so it assembles instead of snapping into place.
         this.fadeInMenuButtons(buttons);
     }
 
@@ -145,8 +135,7 @@ export class MainMenuScene extends Phaser.Scene {
         if (!this.textures.exists('fx_sparkle')) return;
         import('../systems/EffectsSystem.js').then(({ EffectsSystem }) => {
             EffectsSystem.ensureAnims(this);
-            const width = this.cameras.main.width;
-            const height = this.cameras.main.height;
+            const L = layout(this);
             this.time.addEvent({
                 delay: 2200,
                 loop: true,
@@ -154,8 +143,8 @@ export class MainMenuScene extends Phaser.Scene {
                     if (!this.scene.isActive()) return;
                     EffectsSystem.play(
                         this,
-                        Phaser.Math.Between(40, width - 40),
-                        Phaser.Math.Between(60, height - 80),
+                        Phaser.Math.Between(40, L.w - 40),
+                        Phaser.Math.Between(60, L.h - 80),
                         'sparkle',
                         { scale: 1.1, depth: 5 }
                     );
@@ -164,11 +153,11 @@ export class MainMenuScene extends Phaser.Scene {
         });
     }
 
-    /** Fade + slide each button in, top to bottom. */
     fadeInMenuButtons(buttons) {
         buttons.forEach((button, i) => {
             const targetY = button.y;
             button.setAlpha(0);
+            button.y = targetY + 18;
             this.tweens.add({
                 targets: button,
                 alpha: 1,
@@ -181,45 +170,56 @@ export class MainMenuScene extends Phaser.Scene {
     }
 
     showCredits() {
-        const width = this.cameras.main.width;
-        const height = this.cameras.main.height;
+        const L = layout(this);
+        const layer = [];
 
-        const overlay = this.add.graphics();
-        overlay.fillStyle(0x0a0a1a, 0.95);
-        overlay.fillRect(0, 0, width, height);
-        overlay.setInteractive();
+        const blocker = this.add.rectangle(L.cx, L.cy, L.w, L.h, 0x0a0a1a, 0.94)
+            .setInteractive()
+            .setDepth(500);
+        layer.push(blocker);
 
-        const creditsText = `
-REALMS OF AETHERIA
+        const panel = UIComponents.createPanel(
+            this, L.x(0.12), L.y(0.12), L.w * 0.76, L.h * 0.76, 0.95
+        );
+        if (panel?.setDepth) panel.setDepth(501);
+        layer.push(panel);
 
-Developed by: Gab
-Engine: Phaser 3 + Capacitor
+        const body = [
+            'REALMS OF AETHERIA',
+            '',
+            'Developed by Gab',
+            'Engine: Phaser 3 + Capacitor',
+            '',
+            'Assets',
+            'Medieval Fantasy · RPG Battle System',
+            'Cute Fantasy Free · Pixel Effects',
+            'Tiny RPG Characters · Minifolks',
+            'UI Bundle Free · Ninja Adventure HUD',
+            '',
+            'Thank you for playing!',
+        ].join('\n');
 
-Assets:
-- Medieval Fantasy Pack
-- RPG Battle System
-- Cute Fantasy Free
-- Super Pixel Effects Gigapack
-- Tiny RPG Character Pack
-- Minifolks Villagers
-- UI Bundle Free
-
-Thank you for playing!
-
-Tap to return to menu
-        `;
-
-        this.add.text(width / 2, height / 2, creditsText, {
+        const credits = this.add.text(L.cx, L.cy - L.font(10), body, {
             fontFamily: 'Georgia, serif',
-            fontSize: '18px',
+            fontSize: `${L.font(16)}px`,
             color: '#f0e6d3',
             align: 'center',
-            lineSpacing: 8,
-        }).setOrigin(0.5);
+            lineSpacing: 6,
+            wordWrap: { width: L.w * 0.68 },
+        }).setOrigin(0.5).setDepth(510);
+        layer.push(credits);
 
-        overlay.on('pointerdown', () => {
-            overlay.destroy();
-            this.scene.restart();
+        const close = () => layer.forEach((n) => n?.destroy?.());
+
+        blocker.on('pointerdown', close);
+
+        const back = UIComponents.createButton(this, L.cx, L.bottom(L.pad + 28), 'Back', close, {
+            width: Math.min(200, L.w * 0.4),
+            height: Math.max(40, L.font(42)),
+            fontSize: L.font(18),
+            variant: 'primary',
         });
+        back.setDepth(520);
+        layer.push(back);
     }
 }

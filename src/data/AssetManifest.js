@@ -138,11 +138,21 @@ const HUD = [
     ['hud_life_empty', 'life-box-empty.png'],
     ['hud_heart_full', 'full-heart.png'],
     ['hud_heart_empty', 'empty-heart.png'],
+    ['hud_medium_box', 'medium-box.png'],
+    ['hud_little_box', 'little-box.png'],
 ].map(([key, file]) => ({
     key,
     file: `assets/hud/${file}`,
     group: 'critical',
 }));
+
+// --- Button / panel art used by UIComponents ---
+const UI_CONTROLS = [
+    { key: 'btn_yes', file: 'assets/ui/buttons/yes-button.png', group: 'critical' },
+    { key: 'btn_no', file: 'assets/ui/buttons/no-button.png', group: 'critical' },
+    { key: 'btn_arrow', file: 'assets/ui/buttons/arrow.png', group: 'critical' },
+    { key: 'ui_panel_box', file: 'assets/ui/panels/panel-box.png', group: 'critical' },
+];
 
 // ============================================
 // AUDIO
@@ -278,6 +288,7 @@ export const ASSET_MANIFEST = [
     ...BACKGROUNDS,
     ...UI,
     ...HUD,
+    ...UI_CONTROLS,
     ...MONSTERS,
     ...NPCS,
     ...ITEMS,

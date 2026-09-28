@@ -3,7 +3,8 @@
 // ============================================
 
 import { RACES, CLASSES, TRAITS, XP_TABLE, MAX_LEVEL } from '../config/GameConfig.js';
-import { ITEMS } from '../data/Items.js';
+import { ITEMS, getEquipSlot, canClassEquipWeapon } from '../data/Items.js';
+import { DEFAULT_COSMETICS } from '../data/Cosmetics.js';
 
 export class PlayerSystem {
     constructor(data = null) {
@@ -20,6 +21,7 @@ export class PlayerSystem {
         this.class = CLASSES[classId.toUpperCase()] || CLASSES.WARRIOR;
         this.trait = TRAITS[traitId.toUpperCase()] || TRAITS.BRAVE;
         this.avatarIndex = avatarIndex;
+        this.cosmetics = { ...DEFAULT_COSMETICS };
 
         this.level = 1;
         this.exp = 0;
@@ -99,14 +101,21 @@ export class PlayerSystem {
 
         this.stats = { ...this.baseStats };
 
-        // Add equipment stats
+        let equipAtk = 0;
+        let equipDef = 0;
+        let equipSpd = 0;
+        let equipMp = 0;
+
+        // Add equipment stats (atk/def on weapons were previously ignored).
         for (const slot in this.equipment) {
             const item = this.equipment[slot];
             if (item && item.stats) {
-                for (const stat in item.stats) {
-                    if (this.stats[stat] !== undefined) {
-                        this.stats[stat] += item.stats[stat];
-                    }
+                for (const [stat, val] of Object.entries(item.stats)) {
+                    if (stat === 'atk') equipAtk += val;
+                    else if (stat === 'def') equipDef += val;
+                    else if (stat === 'spd') equipSpd += val;
+                    else if (stat === 'mp') equipMp += val;
+                    else if (this.stats[stat] !== undefined) this.stats[stat] += val;
                 }
             }
         }
@@ -127,12 +136,23 @@ export class PlayerSystem {
         const mpGain = this.maxMp - oldMaxMp;
 
         this.maxHp = Math.floor((this.race.baseStats.hp + this.class.statGrowth.hp * this.level) * (this.trait?.effect?.hpMult || 1) + this.stats.vit * 5);
-        this.maxMp = Math.floor((this.race.baseStats.mp + this.class.statGrowth.mp * this.level) * (this.trait?.effect?.mpMult || 1) + this.stats.int * 3);
+        this.maxMp = Math.floor(
+            (this.race.baseStats.mp + this.class.statGrowth.mp * this.level) * (this.trait?.effect?.mpMult || 1) +
+            this.stats.int * 3
+        ) + equipMp;
 
-        this.atk = Math.floor((this.race.baseStats.atk + this.class.statGrowth.atk * this.level) + this.stats.str * 2);
-        this.def = Math.floor((this.race.baseStats.def + this.class.statGrowth.def * this.level) + this.stats.vit * 1.5);
-        this.spd = Math.floor((this.race.baseStats.spd + this.class.statGrowth.spd * this.level) + this.stats.dex * 1.5);
+        this.atk = Math.floor((this.race.baseStats.atk + this.class.statGrowth.atk * this.level) + this.stats.str * 2) + equipAtk;
+        this.def = Math.floor((this.race.baseStats.def + this.class.statGrowth.def * this.level) + this.stats.vit * 1.5) + equipDef;
+        this.spd = Math.floor((this.race.baseStats.spd + this.class.statGrowth.spd * this.level) + this.stats.dex * 1.5) + equipSpd;
         this.luk = Math.floor((this.race.baseStats.luk + this.class.statGrowth.luk * this.level) + this.stats.luk);
+
+        // Berserk trait: low HP damage spike
+        if (this.trait?.effect?.berserkMult && this.maxHp > 0) {
+            const ratio = this.hp / this.maxHp;
+            if (ratio <= (this.trait.effect.berserkThreshold || 0.3)) {
+                this.atk = Math.floor(this.atk * this.trait.effect.berserkMult);
+            }
+        }
 
         // Buffs
         for (const buff of this.buffs) {
@@ -214,7 +234,13 @@ export class PlayerSystem {
         const itemData = ITEMS[itemId];
         if (!itemData) return false;
 
-        const slot = itemData.type;
+        const slot = getEquipSlot(itemData);
+        if (!slot) return false;
+
+        if (slot === 'weapon' && !canClassEquipWeapon(this.class, itemData.type)) {
+            return false;
+        }
+
         const currentEquipped = this.equipment[slot];
 
         // Remove from inventory
@@ -245,11 +271,12 @@ export class PlayerSystem {
         if (!itemData || !itemData.effect) return false;
 
         const effect = itemData.effect;
+        const potionMult = this.trait?.effect?.potionMult || 1;
         if (effect.heal) {
-            this.hp = Math.min(this.maxHp, this.hp + effect.heal);
+            this.hp = Math.min(this.maxHp, this.hp + Math.floor(effect.heal * potionMult));
         }
         if (effect.mp) {
-            this.mp = Math.min(this.maxMp, this.mp + effect.mp);
+            this.mp = Math.min(this.maxMp, this.mp + Math.floor(effect.mp * potionMult));
         }
         if (effect.fullHeal) {
             this.hp = this.maxHp;
@@ -322,6 +349,7 @@ export class PlayerSystem {
             class: this.class.id,
             trait: this.trait.id,
             avatarIndex: this.avatarIndex,
+            cosmetics: this.cosmetics,
             level: this.level,
             exp: this.exp,
             gold: this.gold,
@@ -351,6 +379,7 @@ export class PlayerSystem {
         this.class = Object.values(CLASSES).find(c => c.id === data.class) || CLASSES.WARRIOR;
         this.trait = Object.values(TRAITS).find(t => t.id === data.trait) || TRAITS.BRAVE;
         this.avatarIndex = data.avatarIndex || 0;
+        this.cosmetics = { ...DEFAULT_COSMETICS, ...(data.cosmetics || {}) };
         this.level = data.level;
         this.exp = data.exp;
         this.gold = data.gold;
@@ -364,6 +393,11 @@ export class PlayerSystem {
         this.facing = data.facing;
         this.inventory = data.inventory || [];
         this.equipment = data.equipment || {};
+        // Older saves stored swords under equipment.sword instead of weapon.
+        if (this.equipment.sword && !this.equipment.weapon) {
+            this.equipment.weapon = this.equipment.sword;
+            delete this.equipment.sword;
+        }
         this.skills = data.skills || [this.class.startSkill];
         this.skillLevels = data.skillLevels || {};
         this.quests = data.quests || {};

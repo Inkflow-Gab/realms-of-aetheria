@@ -15,6 +15,8 @@ import { QuestLogScene } from './scenes/QuestLogScene.js';
 import { StatsScene } from './scenes/StatsScene.js';
 import { ShopScene } from './scenes/ShopScene.js';
 import { SettingsScene } from './scenes/SettingsScene.js';
+import { CosmeticsScene } from './scenes/CosmeticsScene.js';
+import { SettingsSystem } from './systems/SettingsSystem.js';
 
 // ============================================
 // IMMERSIVE FULLSCREEN
@@ -88,6 +90,7 @@ const config = {
         StatsScene,
         ShopScene,
         SettingsScene,
+        CosmeticsScene,
     ],
 };
 
@@ -106,7 +109,23 @@ if (typeof Phaser === 'undefined') {
     throw new Error('Phaser failed to load');
 }
 
-const game = new Phaser.Game(config);
+const bootSettings = SettingsSystem.get();
+const gfxBoot = SettingsSystem.getGraphicsProfile(bootSettings);
+
+const game = new Phaser.Game({
+    ...config,
+    render: {
+        ...config.render,
+        antialias: gfxBoot.antialias,
+    },
+    fps: {
+        target: bootSettings.fpsCap === 0 ? 60 : bootSettings.fpsCap,
+        min: 30,
+        forceSetTimeOut: bootSettings.fpsCap !== 0 && bootSettings.fpsCap <= 30,
+    },
+});
+
+SettingsSystem.apply(game, bootSettings);
 
 // Keep canvas locked to the visible viewport after orientation / inset changes.
 const refit = () => {

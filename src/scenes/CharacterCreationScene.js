@@ -4,6 +4,7 @@
 
 import { RACES, CLASSES, TRAITS } from '../config/GameConfig.js';
 import { UIComponents } from '../ui/UIComponents.js';
+import { layout, addBetaBadge } from '../ui/Layout.js';
 import { PlayerSystem } from '../systems/PlayerSystem.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 
@@ -13,147 +14,150 @@ export class CharacterCreationScene extends Phaser.Scene {
     }
 
     create() {
-        const width = this.cameras.main.width;
-        const height = this.cameras.main.height;
+        const L = layout(this);
 
-        // Background
-        this.add.image(width / 2, height / 2, 'bg_2').setDisplaySize(width, height);
-        const overlay = this.add.graphics();
-        overlay.fillStyle(0x0a0a1a, 0.7);
-        overlay.fillRect(0, 0, width, height);
+        if (this.textures.exists('bg_2')) {
+            this.add.image(L.cx, L.cy, 'bg_2').setDisplaySize(L.w, L.h);
+        }
+        this.add.rectangle(L.cx, L.cy, L.w, L.h, 0x0a0a1a, 0.72);
 
-        // Title
-        this.add.text(width / 2, 40, 'Create Your Hero', {
+        addBetaBadge(this, 'top-right');
+
+        this.add.text(L.cx, L.pad + L.font(8), 'Create Your Hero', {
             fontFamily: 'Georgia, serif',
-            fontSize: '36px',
+            fontSize: `${L.font(30)}px`,
             color: '#c9a84c',
-        }).setOrigin(0.5);
+            stroke: '#000',
+            strokeThickness: 3,
+        }).setOrigin(0.5, 0);
 
-        // === NAME INPUT ===
-        this.add.text(100, 100, 'Name:', {
-            fontFamily: 'Georgia, serif',
-            fontSize: '20px',
-            color: '#f0e6d3',
+        // Footer always stays on-screen -- this is what made "Begin Adventure"
+        // unreachable on phones when it was hard-coded at y=620.
+        const footerH = Math.max(52, L.font(56));
+        const footerY = L.h - L.pad - footerH / 2;
+        const contentBottom = footerY - footerH / 2 - L.pad;
+        const contentTop = L.pad + L.font(42);
+
+        const leftX = L.x(0.06);
+        const colW = L.w * 0.52;
+        const rightCx = L.x(0.78);
+        let rowY = contentTop + L.font(8);
+        const rowGap = Math.max(L.font(52), (contentBottom - contentTop) / 5.2);
+
+        // --- Name ---
+        this.add.text(leftX, rowY, 'Name', {
+            fontFamily: 'Georgia, serif', fontSize: `${L.font(16)}px`, color: '#f0e6d3',
         });
-
-        this.nameText = this.add.text(200, 100, 'Hero', {
+        this.nameText = this.add.text(leftX + L.font(70), rowY, 'Hero', {
             fontFamily: 'Georgia, serif',
-            fontSize: '20px',
+            fontSize: `${L.font(18)}px`,
             color: '#c9a84c',
             backgroundColor: '#1a1a2e',
-            padding: { x: 10, y: 5 },
+            padding: { x: 10, y: 6 },
         }).setInteractive({ useHandCursor: true });
+        this.nameText.on('pointerdown', () => this.promptName());
 
-        this.nameText.on('pointerdown', () => {
-            this.promptName();
-        });
-
-        // === RACE SELECTION ===
-        this.add.text(100, 160, 'Race:', {
-            fontFamily: 'Georgia, serif',
-            fontSize: '20px',
-            color: '#f0e6d3',
-        });
-
+        // --- Race / Class / Trait rows ---
         this.raceIndex = 0;
-        this.raceKeys = Object.keys(RACES);
-        this.raceText = this.add.text(200, 160, '', {
-            fontFamily: 'Georgia, serif',
-            fontSize: '18px',
-            color: '#c9a84c',
-        });
-
-        UIComponents.createButton(this, 420, 160, '◀', () => this.cycleRace(-1), { width: 40, height: 35, fontSize: 16 });
-        UIComponents.createButton(this, 580, 160, '▶', () => this.cycleRace(1), { width: 40, height: 35, fontSize: 16 });
-
-        this.raceDesc = this.add.text(200, 185, '', {
-            fontFamily: 'Georgia, serif',
-            fontSize: '14px',
-            color: '#aaaaaa',
-        });
-
-        // === CLASS SELECTION ===
-        this.add.text(100, 230, 'Class:', {
-            fontFamily: 'Georgia, serif',
-            fontSize: '20px',
-            color: '#f0e6d3',
-        });
-
         this.classIndex = 0;
-        this.classKeys = Object.keys(CLASSES);
-        this.classText = this.add.text(200, 230, '', {
-            fontFamily: 'Georgia, serif',
-            fontSize: '18px',
-            color: '#c9a84c',
-        });
-
-        UIComponents.createButton(this, 420, 230, '◀', () => this.cycleClass(-1), { width: 40, height: 35, fontSize: 16 });
-        UIComponents.createButton(this, 580, 230, '▶', () => this.cycleClass(1), { width: 40, height: 35, fontSize: 16 });
-
-        this.classDesc = this.add.text(200, 255, '', {
-            fontFamily: 'Georgia, serif',
-            fontSize: '14px',
-            color: '#aaaaaa',
-        });
-
-        // === TRAIT SELECTION ===
-        this.add.text(100, 300, 'Trait:', {
-            fontFamily: 'Georgia, serif',
-            fontSize: '20px',
-            color: '#f0e6d3',
-        });
-
         this.traitIndex = 0;
-        this.traitKeys = Object.keys(TRAITS);
-        this.traitText = this.add.text(200, 300, '', {
-            fontFamily: 'Georgia, serif',
-            fontSize: '18px',
-            color: '#c9a84c',
-        });
-
-        UIComponents.createButton(this, 420, 300, '◀', () => this.cycleTrait(-1), { width: 40, height: 35, fontSize: 16 });
-        UIComponents.createButton(this, 580, 300, '▶', () => this.cycleTrait(1), { width: 40, height: 35, fontSize: 16 });
-
-        this.traitDesc = this.add.text(200, 325, '', {
-            fontFamily: 'Georgia, serif',
-            fontSize: '14px',
-            color: '#aaaaaa',
-        });
-
-        // === AVATAR PREVIEW ===
-        this.add.text(700, 100, 'Preview:', {
-            fontFamily: 'Georgia, serif',
-            fontSize: '20px',
-            color: '#f0e6d3',
-        });
-
-        this.avatarPreview = this.add.image(800, 250, 'char_0').setScale(2);
-
-        // Avatar selection
         this.avatarIndex = 0;
-        UIComponents.createButton(this, 720, 380, '◀', () => this.cycleAvatar(-1), { width: 40, height: 35, fontSize: 16 });
-        UIComponents.createButton(this, 880, 380, '▶', () => this.cycleAvatar(1), { width: 40, height: 35, fontSize: 16 });
+        this.raceKeys = Object.keys(RACES);
+        this.classKeys = Object.keys(CLASSES);
+        this.traitKeys = Object.keys(TRAITS);
 
-        // === STATS PREVIEW ===
-        this.statsPanel = UIComponents.createPanel(this, 650, 420, 300, 200);
-        this.statsText = this.add.text(670, 440, '', {
+        rowY += rowGap;
+        ({ label: this.raceText, desc: this.raceDesc } = this.buildCycleRow(
+            leftX, rowY, colW, 'Race', () => this.cycleRace(-1), () => this.cycleRace(1)
+        ));
+
+        rowY += rowGap;
+        ({ label: this.classText, desc: this.classDesc } = this.buildCycleRow(
+            leftX, rowY, colW, 'Class', () => this.cycleClass(-1), () => this.cycleClass(1)
+        ));
+
+        rowY += rowGap;
+        ({ label: this.traitText, desc: this.traitDesc } = this.buildCycleRow(
+            leftX, rowY, colW, 'Trait', () => this.cycleTrait(-1), () => this.cycleTrait(1)
+        ));
+
+        // --- Preview column ---
+        this.add.text(rightCx, contentTop, 'Preview', {
+            fontFamily: 'Georgia, serif', fontSize: `${L.font(16)}px`, color: '#f0e6d3',
+        }).setOrigin(0.5, 0);
+
+        const previewY = contentTop + L.font(90);
+        if (this.textures.exists('char_0')) {
+            this.avatarPreview = this.add.image(rightCx, previewY, 'char_0')
+                .setScale(Math.min(2.2, L.h / 280));
+        } else {
+            this.avatarPreview = this.add.rectangle(rightCx, previewY, 72, 72, 0xc9a84c);
+        }
+
+        const arrowSize = Math.max(36, L.font(40));
+        UIComponents.createArrowButton(this, rightCx - L.font(70), previewY + L.font(90), -1, () => this.cycleAvatar(-1), arrowSize);
+        UIComponents.createArrowButton(this, rightCx + L.font(70), previewY + L.font(90), 1, () => this.cycleAvatar(1), arrowSize);
+
+        const statsW = Math.min(260, L.w * 0.28);
+        const statsH = Math.min(170, contentBottom - (previewY + L.font(110)));
+        const statsX = rightCx - statsW / 2;
+        const statsY = Math.min(previewY + L.font(120), contentBottom - statsH);
+        UIComponents.createPanel(this, statsX, statsY, statsW, Math.max(90, statsH), 0.88);
+        this.statsText = this.add.text(statsX + 12, statsY + 10, '', {
             fontFamily: 'Georgia, serif',
-            fontSize: '14px',
+            fontSize: `${L.font(12)}px`,
             color: '#f0e6d3',
-            lineSpacing: 4,
+            lineSpacing: 2,
         });
 
-        // === BUTTONS ===
-        UIComponents.createButton(this, 400, 620, 'Back', () => {
+        // --- Footer actions (always visible) ---
+        const btnH = Math.max(44, L.font(46));
+        UIComponents.createButton(this, L.x(0.28), footerY, 'Back', () => {
             this.scene.start('MainMenu');
-        }, { width: 150, height: 45, fontSize: 18 });
+        }, {
+            width: Math.min(160, L.w * 0.28),
+            height: btnH,
+            fontSize: L.font(18),
+            variant: 'ghost',
+        });
 
-        UIComponents.createButton(this, 800, 620, 'Begin Adventure', () => {
+        UIComponents.createButton(this, L.x(0.68), footerY, 'Begin Adventure', () => {
             this.startGame();
-        }, { width: 250, height: 50, fontSize: 22, bgColor: 0x2a4a2a });
+        }, {
+            width: Math.min(280, L.w * 0.42),
+            height: btnH,
+            fontSize: L.font(20),
+            variant: 'primary',
+            bgColor: 0x2a4a2a,
+        });
 
-        // Initialize display
         this.updateDisplay();
+    }
+
+    buildCycleRow(x, y, colW, title, onPrev, onNext) {
+        const L = layout(this);
+        this.add.text(x, y, title, {
+            fontFamily: 'Georgia, serif', fontSize: `${L.font(16)}px`, color: '#f0e6d3',
+        });
+
+        const arrowSize = Math.max(34, L.font(36));
+        const valueX = x + L.font(70);
+        const label = this.add.text(valueX, y, '', {
+            fontFamily: 'Georgia, serif', fontSize: `${L.font(17)}px`, color: '#c9a84c',
+        });
+
+        const arrowsX = x + Math.min(colW - arrowSize * 2 - 8, L.font(280));
+        UIComponents.createArrowButton(this, arrowsX, y + 8, -1, onPrev, arrowSize);
+        UIComponents.createArrowButton(this, arrowsX + arrowSize + 10, y + 8, 1, onNext, arrowSize);
+
+        const desc = this.add.text(valueX, y + L.font(22), '', {
+            fontFamily: 'Georgia, serif',
+            fontSize: `${L.font(12)}px`,
+            color: '#aaaaaa',
+            wordWrap: { width: colW - L.font(80) },
+        });
+
+        return { label, desc };
     }
 
     promptName() {
@@ -181,7 +185,9 @@ export class CharacterCreationScene extends Phaser.Scene {
 
     cycleAvatar(dir) {
         this.avatarIndex = (this.avatarIndex + dir + 11) % 11;
-        this.avatarPreview.setTexture(`char_${this.avatarIndex}`);
+        if (this.avatarPreview.setTexture && this.textures.exists(`char_${this.avatarIndex}`)) {
+            this.avatarPreview.setTexture(`char_${this.avatarIndex}`);
+        }
     }
 
     updateDisplay() {
@@ -190,46 +196,39 @@ export class CharacterCreationScene extends Phaser.Scene {
         const trait = TRAITS[this.traitKeys[this.traitIndex]];
 
         this.raceText.setText(race.name);
-        this.raceDesc.setText(`${race.desc}\nHP:${race.baseStats.hp} MP:${race.baseStats.mp} ATK:${race.baseStats.atk} DEF:${race.baseStats.def} SPD:${race.baseStats.spd}`);
+        this.raceDesc.setText(`${race.desc}  ·  HP ${race.baseStats.hp}  ATK ${race.baseStats.atk}  DEF ${race.baseStats.def}`);
 
         this.classText.setText(cls.name);
-        this.classDesc.setText(`${cls.desc}\nPrimary: ${cls.primaryStat.toUpperCase()} | Weapons: ${cls.weaponTypes.join(', ')}`);
+        this.classDesc.setText(`${cls.desc}  ·  ${cls.primaryStat.toUpperCase()} focus`);
 
-        this.traitText.setText(trait.name);
-        this.traitDesc.setText(trait.desc);
+        this.traitText.setText(`${trait.name}${trait.tier ? ` · ${trait.tier}` : ''}`);
+        this.traitDesc.setText(
+            `${trait.category ? `[${trait.category}] ` : ''}${trait.desc}`
+        );
 
-        // Stats preview
         const base = race.baseStats;
         const growth = cls.statGrowth;
-        const stats = [
-            `HP: ${base.hp + growth.hp}`,
-            `MP: ${base.mp + growth.mp}`,
-            `ATK: ${base.atk + growth.atk}`,
-            `DEF: ${base.def + growth.def}`,
-            `SPD: ${base.spd + growth.spd}`,
-            `LUK: ${base.luk + growth.luk}`,
+        this.statsText.setText([
+            `HP  ${base.hp + growth.hp}    MP  ${base.mp + growth.mp}`,
+            `ATK ${base.atk + growth.atk}    DEF ${base.def + growth.def}`,
+            `SPD ${base.spd + growth.spd}    LUK ${base.luk + growth.luk}`,
             '',
-            `STR: ${10 + race.bonuses.str}`,
-            `DEX: ${10 + race.bonuses.dex}`,
-            `INT: ${10 + race.bonuses.int}`,
-            `VIT: ${10 + race.bonuses.vit}`,
-            `LUK: ${10 + race.bonuses.luk}`,
-        ];
-        this.statsText.setText(stats.join('\n'));
+            `STR ${10 + race.bonuses.str}  DEX ${10 + race.bonuses.dex}`,
+            `INT ${10 + race.bonuses.int}  VIT ${10 + race.bonuses.vit}`,
+        ].join('\n'));
     }
 
     startGame() {
-        const name = this.nameText.text;
-        const race = this.raceKeys[this.raceIndex];
-        const cls = this.classKeys[this.classIndex];
-        const trait = this.traitKeys[this.traitIndex];
-
         const player = new PlayerSystem();
-        player.initNew(name, race, cls, trait, this.avatarIndex);
+        player.initNew(
+            this.nameText.text,
+            this.raceKeys[this.raceIndex],
+            this.classKeys[this.classIndex],
+            this.traitKeys[this.traitIndex],
+            this.avatarIndex
+        );
 
-        const saveSystem = new SaveSystem();
-        saveSystem.save(player);
-
+        new SaveSystem().save(player);
         this.scene.start('World', { player });
     }
 }

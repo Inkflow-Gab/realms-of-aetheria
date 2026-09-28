@@ -47,6 +47,42 @@ export const ITEM_TYPES = {
     FOOD: { id: 'food', name: 'Food', category: 'consumable', slot: null, icon: 'items/food/bread' },
 };
 
+const SLOT_BY_TYPE = Object.fromEntries(
+    Object.values(ITEM_TYPES).map((t) => [t.id, t.slot])
+);
+const CATEGORY_BY_TYPE = Object.fromEntries(
+    Object.values(ITEM_TYPES).map((t) => [t.id, t.category])
+);
+
+/** Resolve equipment slot (weapon items used to land in `equipment.sword`). */
+export function getEquipSlot(itemData) {
+    if (!itemData) return null;
+    if (itemData.slot) return itemData.slot;
+    return SLOT_BY_TYPE[itemData.type] || null;
+}
+
+export function getItemCategory(itemData) {
+    if (!itemData) return null;
+    if (itemData.category) return itemData.category;
+    return CATEGORY_BY_TYPE[itemData.type] || null;
+}
+
+export function canClassEquipWeapon(playerClass, weaponType) {
+    if (!playerClass?.weaponTypes || !weaponType) return true;
+    return playerClass.weaponTypes.includes(weaponType);
+}
+
+export function describeWeaponPerk(perk) {
+    if (!perk) return '';
+    const parts = [];
+    if (perk.critBonus) parts.push(`+${Math.round(perk.critBonus * 100)}% crit`);
+    if (perk.lifesteal) parts.push(`${Math.round(perk.lifesteal * 100)}% lifesteal`);
+    if (perk.mpOnHit) parts.push(`+${perk.mpOnHit} MP on hit`);
+    if (perk.bonusVsBoss) parts.push('Bonus vs bosses');
+    if (perk.element) parts.push(`${perk.element} element`);
+    return parts.join(' · ');
+}
+
 // Full item database
 export const ITEMS = {
     // === WEAPONS ===
@@ -72,13 +108,45 @@ export const ITEMS = {
     },
     dragon_slayer: {
         id: 'dragon_slayer', name: 'Dragon Slayer', type: 'greatsword', rarity: 'epic',
-        stats: { atk: 55, str: 10, luk: 5, spd: -3 }, level: 25, price: 2500, desc: 'Forged to slay dragons.',
+        stats: { atk: 55, str: 10, luk: 5, spd: -3 }, level: 25, price: 2500,
+        desc: 'Forged to slay dragons.',
+        perk: { bonusVsBoss: true, critBonus: 0.06 },
         icon: 'items/weapons/greatsword_dragon'
     },
     excalibur: {
         id: 'excalibur', name: 'Excalibur', type: 'sword', rarity: 'legendary',
-        stats: { atk: 80, str: 15, dex: 10, luk: 10, spd: 5 }, level: 40, price: 10000, desc: 'The sword of kings.',
+        stats: { atk: 80, str: 15, dex: 10, luk: 10, spd: 5 }, level: 40, price: 10000,
+        desc: 'The sword of kings.',
+        perk: { critBonus: 0.08, lifesteal: 0.05, element: 'holy' },
         icon: 'items/weapons/sword_excalibur'
+    },
+    frostbrand: {
+        id: 'frostbrand', name: 'Frostbrand', type: 'sword', rarity: 'rare',
+        stats: { atk: 26, int: 6, spd: 3 }, level: 14, price: 550,
+        desc: 'Blade rimed with eternal ice.',
+        perk: { critBonus: 0.04, element: 'ice' },
+        icon: 'items/weapons/sword_steel'
+    },
+    flamebrand: {
+        id: 'flamebrand', name: 'Flamebrand', type: 'axe', rarity: 'rare',
+        stats: { atk: 34, str: 8, spd: -1 }, level: 17, price: 650,
+        desc: 'Each swing leaves embers in the air.',
+        perk: { critBonus: 0.05, element: 'fire' },
+        icon: 'items/weapons/axe_berserker'
+    },
+    void_dagger: {
+        id: 'void_dagger', name: 'Void Dagger', type: 'dagger', rarity: 'epic',
+        stats: { atk: 42, dex: 14, luk: 12, spd: 8 }, level: 24, price: 2200,
+        desc: 'Cuts through shadow itself.',
+        perk: { critBonus: 0.1, lifesteal: 0.04, element: 'dark' },
+        icon: 'items/weapons/dagger_assassin'
+    },
+    celestial_bow: {
+        id: 'celestial_bow', name: 'Celestial Bow', type: 'bow', rarity: 'legendary',
+        stats: { atk: 58, dex: 18, spd: 10, luk: 8 }, level: 35, price: 5500,
+        desc: 'Arrows guided by starlight.',
+        perk: { critBonus: 0.07, bonusVsBoss: true, element: 'light' },
+        icon: 'items/weapons/bow_wind'
     },
     apprentice_wand: {
         id: 'apprentice_wand', name: 'Apprentice Wand', type: 'wand', rarity: 'common',
@@ -97,7 +165,9 @@ export const ITEMS = {
     },
     staff_of_archmagi: {
         id: 'staff_of_archmagi', name: 'Staff of the Archmagi', type: 'staff', rarity: 'epic',
-        stats: { atk: 35, int: 25, mp: 80, spd: 3 }, level: 28, price: 3500, desc: 'Powerful beyond measure.',
+        stats: { atk: 35, int: 25, mp: 80, spd: 3 }, level: 28, price: 3500,
+        desc: 'Powerful beyond measure.',
+        perk: { mpOnHit: 3, element: 'arcane' },
         icon: 'items/weapons/staff_archmagi'
     },
     hunters_bow: {
@@ -321,7 +391,7 @@ export const ITEMS = {
 // Shop inventory by vendor type
 export const SHOP_INVENTORIES = {
     general: ['rusty_sword', 'iron_sword', 'leather_armor', 'minor_health_potion', 'minor_mana_potion', 'bread', 'town_portal_scroll', 'antidote', 'copper_ring', 'leather_belt'],
-    weapons: ['rusty_sword', 'iron_sword', 'steel_longsword', 'elven_blade', 'hunters_bow', 'windforce_bow', 'apprentice_wand', 'oak_staff', 'crystal_wand', 'battle_axe', 'berserker_axe', 'war_mace', 'shadow_dagger', 'assassins_blade', 'iron_boots', 'leather_boots'],
+    weapons: ['rusty_sword', 'iron_sword', 'steel_longsword', 'elven_blade', 'frostbrand', 'flamebrand', 'hunters_bow', 'windforce_bow', 'celestial_bow', 'apprentice_wand', 'oak_staff', 'crystal_wand', 'staff_of_archmagi', 'battle_axe', 'berserker_axe', 'dragon_slayer', 'war_mace', 'shadow_dagger', 'assassins_blade', 'void_dagger', 'orb_of_power'],
     armor: ['cloth_robe', 'leather_armor', 'chainmail', 'plate_armor', 'iron_helmet', 'elven_circlet', 'iron_boots', 'leather_gloves', 'wooden_shield', 'iron_shield', 'tower_shield', 'travelers_cloak', 'shadow_cloak'],
     potions: ['minor_health_potion', 'health_potion', 'greater_health_potion', 'super_health_potion', 'minor_mana_potion', 'mana_potion', 'greater_mana_potion', 'elixir_of_life', 'antidote', 'town_portal_scroll', 'bread', 'meat'],
     accessories: ['copper_ring', 'silver_ring', 'ring_of_power', 'gold_amulet', 'amulet_of_guardian', 'leather_belt', 'belt_of_giants'],

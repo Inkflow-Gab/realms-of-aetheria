@@ -6,6 +6,7 @@ import { MONSTERS } from '../data/Monsters.js';
 import { SKILLS } from '../data/Skills.js';
 import { ITEMS } from '../data/Items.js';
 import { UIComponents } from '../ui/UIComponents.js';
+import { layout, addBetaBadge } from '../ui/Layout.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { AudioSystem } from '../systems/AudioSystem.js';
 import { EffectsSystem } from '../systems/EffectsSystem.js';
@@ -24,16 +25,15 @@ export class BattleScene extends Phaser.Scene {
     }
 
     create() {
-        const width = this.cameras.main.width;
-        const height = this.cameras.main.height;
+        const L = layout(this);
+        const width = L.w;
+        const height = L.h;
 
-        // Local audio + quest systems so battle never depends on a paused World
-        // scene holding them (the previous code called this.audio with nothing
-        // initialised and crashed the first Attack tap).
         this.audio = new AudioSystem();
         this.audio.init(this);
         this.questSystem = new QuestSystem(this.player);
         EffectsSystem.ensureAnims(this);
+        addBetaBadge(this, 'top-right');
 
         // Background
         const bgKey = this.textures.exists('bg_5') ? 'bg_5' : null;
@@ -141,30 +141,38 @@ export class BattleScene extends Phaser.Scene {
     }
 
     createActionButtons() {
-        const width = this.cameras.main.width;
-        const height = this.cameras.main.height;
+        const L = layout(this);
+        const btnH = Math.max(44, L.font(48));
+        const y = L.bottom(L.pad + btnH / 2);
+        const attackW = Math.max(100, L.font(110));
 
-        UIComponents.createButton(this, width / 2 - 200, height - 80, 'Attack', () => {
+        UIComponents.createButton(this, L.x(0.18), y, 'Attack', () => {
             this.playerAttack();
-        }, { width: 120, height: 50, fontSize: 18, bgColor: 0x8b0000 });
+        }, { width: attackW, height: btnH, fontSize: L.font(16), bgColor: 0x8b0000, variant: 'danger' });
 
-        const skills = this.player.skills.slice(0, 4);
+        const skills = (this.player.skills || []).slice(0, 4);
+        const skillW = Math.max(72, Math.min(96, (L.w * 0.45) / Math.max(1, skills.length) - 6));
+        const skillStart = L.x(0.38);
         skills.forEach((skillId, i) => {
             const skill = SKILLS[skillId];
             if (!skill) return;
-            const x = width / 2 - 50 + (i * 100);
-            UIComponents.createButton(this, x, height - 80, skill.name.split(' ')[0], () => {
-                this.playerUseSkill(skillId);
-            }, { width: 90, height: 50, fontSize: 12, bgColor: 0x2a2a6a });
+            UIComponents.createButton(
+                this,
+                skillStart + i * (skillW + 6),
+                y,
+                skill.name.split(' ')[0],
+                () => this.playerUseSkill(skillId),
+                { width: skillW, height: btnH, fontSize: L.font(11), bgColor: 0x2a2a6a }
+            );
         });
 
-        UIComponents.createButton(this, width / 2 + 250, height - 80, 'Potion', () => {
+        UIComponents.createButton(this, L.x(0.78), y, 'Potion', () => {
             this.usePotion();
-        }, { width: 100, height: 50, fontSize: 16, bgColor: 0x2a4a2a });
+        }, { width: Math.max(80, L.font(88)), height: btnH, fontSize: L.font(14), bgColor: 0x2a4a2a, variant: 'primary' });
 
-        UIComponents.createButton(this, width - 80, height - 80, 'Flee', () => {
+        UIComponents.createButton(this, L.right(L.pad + 36), y, 'Flee', () => {
             this.flee();
-        }, { width: 80, height: 50, fontSize: 16, bgColor: 0x4a2a2a });
+        }, { width: Math.max(64, L.font(70)), height: btnH, fontSize: L.font(14), bgColor: 0x4a2a2a, variant: 'ghost' });
     }
 
     playerAttack() {
@@ -178,9 +186,24 @@ export class BattleScene extends Phaser.Scene {
             yoyo: true,
         });
 
-        const damage = Math.max(1, this.player.atk - Math.floor(MONSTERS[this.monsterId].def * 0.3));
-        const isCrit = Math.random() < (0.05 + this.player.luk * 0.005);
-        const finalDamage = isCrit ? Math.floor(damage * 1.5) : damage;
+        const weaponPerk = this.player.equipment?.weapon?.perk;
+        let damage = Math.max(1, this.player.atk - Math.floor(MONSTERS[this.monsterId].def * 0.3));
+        if (weaponPerk?.bonusVsBoss && /boss|dragon|yeti|king/i.test(MONSTERS[this.monsterId].name || '')) {
+            damage = Math.floor(damage * 1.15);
+        }
+
+        let critChance = 0.05 + this.player.luk * 0.005;
+        if (weaponPerk?.critBonus) critChance += weaponPerk.critBonus;
+        const isCrit = Math.random() < critChance;
+        let finalDamage = isCrit ? Math.floor(damage * 1.5) : damage;
+
+        if (weaponPerk?.lifesteal) {
+            this.player.hp = Math.min(this.player.maxHp, this.player.hp + Math.floor(finalDamage * weaponPerk.lifesteal));
+        }
+        if (weaponPerk?.mpOnHit) {
+            this.player.mp = Math.min(this.player.maxMp, this.player.mp + weaponPerk.mpOnHit);
+            this.playerMpBar.updateValue(this.player.mp, this.player.maxMp);
+        }
 
         this.monsterCurrentHp = Math.max(0, this.monsterCurrentHp - finalDamage);
         this.monsterHpBarUI.updateValue(this.monsterCurrentHp, MONSTERS[this.monsterId].hp);

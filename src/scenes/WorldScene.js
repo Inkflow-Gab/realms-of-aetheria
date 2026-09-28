@@ -9,6 +9,9 @@ import { QuestSystem } from '../systems/QuestSystem.js';
 import { AudioSystem } from '../systems/AudioSystem.js';
 import { VirtualJoystick } from '../ui/VirtualJoystick.js';
 import { UIComponents } from '../ui/UIComponents.js';
+import { layout, addBetaBadge } from '../ui/Layout.js';
+import { SettingsSystem } from '../systems/SettingsSystem.js';
+import { COSMETIC_AURAS, formatDisplayName } from '../data/Cosmetics.js';
 import { DialogueBox } from '../ui/DialogueBox.js';
 import { MONSTERS, ZONE_SPAWNS } from '../data/Monsters.js';
 import { NPCS } from '../data/NPCs.js';
@@ -70,14 +73,22 @@ export class WorldScene extends Phaser.Scene {
         this.createUI();
 
         // === MOBILE CONTROLS ===
-        this.joystick = new VirtualJoystick(this, 120, height - 120, 120);
+        const joyR = Math.max(50, Math.min(70, this.cameras.main.height * 0.14));
+        this.joystick = new VirtualJoystick(
+            this,
+            Math.max(90, joyR + 30),
+            this.cameras.main.height - joyR - 24,
+            joyR * 1.6
+        );
 
         // Action buttons
         this.createActionButtons();
 
         // === CAMERA ===
         this.cameras.main.startFollow(this.playerSprite, true, 0.1, 0.1);
-        this.cameras.main.setZoom(1.2);
+        const gfx = SettingsSystem.getGraphicsProfile();
+        this.cameras.main.setZoom(gfx.cameraZoom);
+        this.applyPlayerCosmetics();
 
         // === SPAWN ENTITIES ===
         this.spawnNPCs();
@@ -205,100 +216,108 @@ export class WorldScene extends Phaser.Scene {
     }
 
     createUI() {
-        const width = this.cameras.main.width;
-        const height = this.cameras.main.height;
+        const L = layout(this);
+        const width = L.w;
+        const height = L.h;
 
-        // === TOP-LEFT: Player Info ===
+        addBetaBadge(this, 'top-left');
+
+        // === TOP-LEFT: Player Info (below beta badge) ===
         this.uiContainer = this.add.container(0, 0).setScrollFactor(0).setDepth(100);
 
-        // Player name & level
-        this.nameText = this.add.text(15, 10, `${this.player.name} Lv.${this.player.level}`, {
+        const infoTop = L.pad + L.font(28);
+        this.nameText = this.add.text(L.pad, infoTop, `${this.player.name} Lv.${this.player.level}`, {
             fontFamily: 'Georgia, serif',
-            fontSize: '16px',
+            fontSize: `${L.font(15)}px`,
             color: '#c9a84c',
             stroke: '#000',
             strokeThickness: 2,
-        });
+        }).setScrollFactor(0).setDepth(100);
 
-        // HP Bar
-        this.hpBar = UIComponents.createBar(this, 15, 35, 200, 18, this.player.hp, this.player.maxHp, GAME_CONFIG.COLORS.HP);
+        const barW = Math.min(200, width * 0.28);
+        this.hpBar = UIComponents.createBar(this, L.pad, infoTop + L.font(24), barW, 16, this.player.hp, this.player.maxHp, GAME_CONFIG.COLORS.HP);
         this.hpBar.setScrollFactor(0).setDepth(100);
 
-        // MP Bar
-        this.mpBar = UIComponents.createBar(this, 15, 58, 200, 14, this.player.mp, this.player.maxMp, GAME_CONFIG.COLORS.MP);
+        this.mpBar = UIComponents.createBar(this, L.pad, infoTop + L.font(44), barW, 12, this.player.mp, this.player.maxMp, GAME_CONFIG.COLORS.MP);
         this.mpBar.setScrollFactor(0).setDepth(100);
 
-        // XP Bar
-        this.xpBar = UIComponents.createBar(this, 15, 77, 200, 10, this.player.exp, this.player.expToNext || 100, GAME_CONFIG.COLORS.XP);
+        this.xpBar = UIComponents.createBar(this, L.pad, infoTop + L.font(60), barW, 9, this.player.exp, this.player.expToNext || 100, GAME_CONFIG.COLORS.XP);
         this.xpBar.setScrollFactor(0).setDepth(100);
 
-        // Gold
-        this.goldText = this.add.text(15, 95, `Gold: ${this.player.gold}`, {
+        this.goldText = this.add.text(L.pad, infoTop + L.font(74), `Gold: ${this.player.gold}`, {
             fontFamily: 'Georgia, serif',
-            fontSize: '14px',
+            fontSize: `${L.font(13)}px`,
             color: '#ffd700',
             stroke: '#000',
             strokeThickness: 2,
-        });
+        }).setScrollFactor(0).setDepth(100);
 
-        // Zone name
-        this.zoneText = this.add.text(width / 2, 10, this.getZoneName(), {
+        this.zoneText = this.add.text(width / 2, L.pad, this.getZoneName(), {
             fontFamily: 'Georgia, serif',
-            fontSize: '18px',
+            fontSize: `${L.font(16)}px`,
             color: '#c9a84c',
             stroke: '#000',
             strokeThickness: 2,
-        }).setOrigin(0.5, 0);
+        }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(100);
 
-        // === TOP-RIGHT: Menu Buttons ===
+        // === TOP-RIGHT: Menu Buttons (packed so they never spill left) ===
         const btnData = [
-            { key: 'I', label: 'Items', scene: 'Inventory' },
-            { key: 'K', label: 'Skills', scene: 'Skills' },
-            { key: 'L', label: 'Quests', scene: 'QuestLog' },
-            { key: 'P', label: 'Stats', scene: 'Stats' },
+            { label: 'Items', scene: 'Inventory' },
+            { label: 'Skills', scene: 'Skills' },
+            { label: 'Quests', scene: 'QuestLog' },
+            { label: 'Stats', scene: 'Stats' },
+            { label: 'Save', action: 'save' },
         ];
-
+        const topBtnW = Math.max(58, Math.min(78, (width * 0.42) / btnData.length - 6));
+        const topBtnH = Math.max(30, L.font(32));
         btnData.forEach((btn, i) => {
-            const x = width - 120 - (i * 90);
-            const button = UIComponents.createButton(this, x, 30, btn.label, () => {
+            const x = width - L.pad - topBtnW / 2 - i * (topBtnW + 6);
+            const button = UIComponents.createButton(this, x, L.pad + topBtnH / 2, btn.label, () => {
+                if (btn.action === 'save') {
+                    this.saveGame(false);
+                    return;
+                }
                 this.scene.launch(btn.scene, { player: this.player });
                 this.scene.pause();
-            }, { width: 80, height: 35, fontSize: 14 });
+            }, {
+                width: topBtnW,
+                height: topBtnH,
+                fontSize: L.font(12),
+                variant: btn.action === 'save' ? 'primary' : 'ghost',
+                bgColor: btn.action === 'save' ? 0x2a3a4a : undefined,
+            });
             button.setScrollFactor(0).setDepth(100);
         });
 
-        // Manual save -- auto-save already runs every 30s, but players need a
-        // visible "I saved" action on mobile.
-        const saveBtn = UIComponents.createButton(this, width - 480, 30, 'Save', () => {
-            this.saveGame(false);
-        }, { width: 70, height: 35, fontSize: 14, bgColor: 0x2a3a4a });
-        saveBtn.setScrollFactor(0).setDepth(100);
-
         // === BOTTOM-RIGHT: Action Buttons ===
-        this.attackBtn = UIComponents.createButton(this, width - 80, height - 80, 'ATK', () => {
+        const atk = Math.max(58, L.font(64));
+        this.attackBtn = UIComponents.createButton(this, width - L.pad - atk / 2, height - L.pad - atk / 2, 'ATK', () => {
             this.playerAttack();
-        }, { width: 70, height: 70, fontSize: 18, bgColor: 0x8b0000 });
+        }, { width: atk, height: atk, fontSize: L.font(16), bgColor: 0x8b0000, variant: 'danger' });
         this.attackBtn.setScrollFactor(0).setDepth(100);
 
-        this.skillBtn = UIComponents.createButton(this, width - 160, height - 60, 'Skill', () => {
+        this.skillBtn = UIComponents.createButton(this, width - L.pad - atk * 1.7, height - L.pad - atk * 0.55, 'Skill', () => {
             this.openSkillMenu();
-        }, { width: 70, height: 50, fontSize: 14, bgColor: 0x2a2a6a });
+        }, { width: Math.max(56, L.font(60)), height: Math.max(42, L.font(44)), fontSize: L.font(13), bgColor: 0x2a2a6a });
         this.skillBtn.setScrollFactor(0).setDepth(100);
 
-        this.interactBtn = UIComponents.createButton(this, width - 80, height - 160, 'Talk', () => {
+        this.interactBtn = UIComponents.createButton(this, width - L.pad - atk / 2, height - L.pad - atk * 1.65, 'Talk', () => {
             this.interact();
-        }, { width: 70, height: 50, fontSize: 14, bgColor: 0x2a4a2a });
+        }, { width: Math.max(56, L.font(60)), height: Math.max(42, L.font(44)), fontSize: L.font(13), bgColor: 0x2a4a2a, variant: 'primary' });
         this.interactBtn.setScrollFactor(0).setDepth(100);
 
         // === MINIMAP ===
+        const mmW = Math.min(140, width * 0.18);
+        const mmH = Math.min(100, height * 0.22);
+        const mmX = width - L.pad - mmW;
+        const mmY = L.pad + topBtnH + 10;
         this.minimap = this.add.graphics().setScrollFactor(0).setDepth(100);
         this.minimap.fillStyle(0x1a1a2e, 0.7);
-        this.minimap.fillRoundedRect(width - 160, 60, 140, 100, 8);
+        this.minimap.fillRoundedRect(mmX, mmY, mmW, mmH, 8);
         this.minimap.lineStyle(1, 0xc9a84c, 0.5);
-        this.minimap.strokeRoundedRect(width - 160, 60, 140, 100, 8);
+        this.minimap.strokeRoundedRect(mmX, mmY, mmW, mmH, 8);
 
-        // Minimap player dot
-        this.minimapDot = this.add.circle(width - 90, 110, 4, 0xc9a84c).setScrollFactor(0).setDepth(101);
+        this.minimapDot = this.add.circle(mmX + mmW / 2, mmY + mmH / 2, 4, 0xc9a84c).setScrollFactor(0).setDepth(101);
     }
 
     createActionButtons() {
@@ -538,6 +557,13 @@ export class WorldScene extends Phaser.Scene {
         });
     }
 
+    applyPlayerCosmetics() {
+        if (!this.playerSprite) return;
+        const aura = COSMETIC_AURAS[this.player.cosmetics?.aura || 'none'];
+        if (aura?.tint) this.playerSprite.setTint(aura.tint);
+        else this.playerSprite.clearTint();
+    }
+
     saveGame(silent = true) {
         const ok = this.saveSystem.save(this.player, { zone: this.currentZone });
         if (ok && !silent) {
@@ -606,7 +632,7 @@ export class WorldScene extends Phaser.Scene {
         this.mpBar.updateValue(this.player.mp, this.player.maxMp);
         this.xpBar.updateValue(this.player.exp, this.player.expToNext || 100);
         this.goldText.setText(`Gold: ${this.player.gold}`);
-        this.nameText.setText(`${this.player.name} Lv.${this.player.level}`);
+        this.nameText.setText(`${formatDisplayName(this.player)} Lv.${this.player.level}`);
     }
 
     updateMonsters(delta) {

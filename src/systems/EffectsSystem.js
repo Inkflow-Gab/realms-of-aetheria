@@ -106,6 +106,11 @@ export class EffectsSystem {
      * @param {object} [opts]
      */
     static play(scene, x, y, kind, opts = {}) {
+        const settings = window.__aetheriaSettings || {};
+        if (settings.particles === false || settings.graphics === 'low') {
+            if (!opts.force) return null;
+        }
+
         const key = `fx_${kind}`;
         const anim = `${key}_anim`;
         if (!scene.textures.exists(key)) return null;
@@ -136,6 +141,8 @@ export class EffectsSystem {
 
     /** Soft camera kick for hits / crits. */
     static shake(scene, intensity = 0.004, duration = 120) {
+        const settings = window.__aetheriaSettings || {};
+        if (settings.screenShake === false || settings.graphics === 'low') return;
         scene.cameras?.main?.shake(duration, intensity);
     }
 }
