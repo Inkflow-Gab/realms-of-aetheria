@@ -9,7 +9,7 @@ export const GAME_CONFIG = {
 
     // Shown on the main menu. Keep in sync with versionName in
     // android/app/build.gradle and package.json.
-    VERSION: '1.0.5',
+    VERSION: '1.0.6',
 
     // Physics
     GRAVITY: 800,

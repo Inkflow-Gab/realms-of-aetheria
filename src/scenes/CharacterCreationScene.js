@@ -229,6 +229,6 @@ export class CharacterCreationScene extends Phaser.Scene {
         );
 
         new SaveSystem().save(player);
-        this.scene.start('World', { player });
+        this.scene.start('WorldLoad', { player });
     }
 }

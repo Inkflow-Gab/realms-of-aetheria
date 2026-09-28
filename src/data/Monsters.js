@@ -9,8 +9,9 @@ export const MONSTERS = {
         hp: 30, mp: 0, atk: 6, def: 2, spd: 4, exp: 12, gold: [3, 8],
         sprite: 'monsters/slime', scale: 1.0, aggressive: false,
         drops: [
-            { item: 'minor_health_potion', chance: 0.15 },
-            { item: 'bread', chance: 0.2 },
+            { item: 'minor_health_potion', chance: 0.22 },
+            { item: 'bread', chance: 0.28 },
+            { item: 'slime_gel', chance: 0.4 },
         ],
         skills: [],
         desc: 'A weak slime. Good for beginners.'
@@ -41,9 +42,11 @@ export const MONSTERS = {
         hp: 45, mp: 0, atk: 11, def: 3, spd: 10, exp: 22, gold: [8, 18],
         sprite: 'monsters/goblin', scale: 1.0, aggressive: true,
         drops: [
-            { item: 'rusty_sword', chance: 0.08 },
-            { item: 'copper_ring', chance: 0.05 },
-            { item: 'bread', chance: 0.25 },
+            { item: 'rusty_sword', chance: 0.18 },
+            { item: 'copper_ring', chance: 0.1 },
+            { item: 'bread', chance: 0.3 },
+            { item: 'goblin_ear', chance: 0.45 },
+            { item: 'loot_chest_key', chance: 0.06 },
         ],
         skills: ['stab', 'throw_rock'],
         desc: 'A sneaky goblin with a rusty blade.'
@@ -265,9 +268,12 @@ export const MONSTERS = {
         hp: 1000, mp: 200, atk: 70, def: 40, spd: 12, exp: 1000, gold: [500, 1000],
         sprite: 'monsters/dragon', scale: 2.2, aggressive: true, boss: true,
         drops: [
-            { item: 'excalibur', chance: 0.02 },
-            { item: 'dragon_scale_armor', chance: 0.04 },
-            { item: 'elixir_of_life', chance: 0.2 },
+            { item: 'excalibur', chance: 0.05 },
+            { item: 'dragon_scale_armor', chance: 0.1 },
+            { item: 'elixir_of_life', chance: 0.35 },
+            { item: 'boss_trophy', chance: 0.55 },
+            { item: 'magic_dust', chance: 0.7, count: 3 },
+            { item: 'loot_chest_key', chance: 0.3 },
         ],
         skills: ['fire_breath', 'tail_sweep', 'claw', 'wing_gust', 'dragon_fury'],
         desc: 'An ancient and terrible dragon.'

@@ -17,6 +17,10 @@ import { DialogueBox } from '../ui/DialogueBox.js';
 import { MONSTERS, ZONE_SPAWNS } from '../data/Monsters.js';
 import { NPCS } from '../data/NPCs.js';
 import { ITEMS } from '../data/Items.js';
+import { LootSystem } from '../systems/LootSystem.js';
+import { EffectsSystem } from '../systems/EffectsSystem.js';
+import { EncounterSystem } from '../systems/EncounterSystem.js';
+import { getActiveDestination } from '../data/Quests.js';
 
 export class WorldScene extends Phaser.Scene {
     constructor() {
@@ -67,11 +71,25 @@ export class WorldScene extends Phaser.Scene {
 
         // === PLAYER SPRITE ===
         const gfx = SettingsSystem.getGraphicsProfile();
-        this.playerSprite = this.add.sprite(
-            this.player.x * GAME_CONFIG.TILE_SIZE,
-            this.player.y * GAME_CONFIG.TILE_SIZE,
-            `char_${this.player.avatarIndex}`
-        ).setScale(gfx.playerScale || 1.5).setDepth(10);
+        const charKey = `char_${this.player.avatarIndex}`;
+        const safeChar = this.textures.exists(charKey)
+            ? charKey
+            : (this.textures.exists('char_0') ? 'char_0' : null);
+        if (safeChar) {
+            this.playerSprite = this.add.sprite(
+                this.player.x * GAME_CONFIG.TILE_SIZE,
+                this.player.y * GAME_CONFIG.TILE_SIZE,
+                safeChar
+            ).setScale(gfx.playerScale || 1.5).setDepth(10);
+        } else {
+            this.playerSprite = this.add.circle(
+                this.player.x * GAME_CONFIG.TILE_SIZE,
+                this.player.y * GAME_CONFIG.TILE_SIZE,
+                14,
+                0xc9a84c
+            ).setDepth(10);
+            this.playerSprite.setFlipX = () => {};
+        }
 
         // === CAMERA (zoom stays 1 — zoomed cameras break fixed HUD taps) ===
         this.cameras.main.startFollow(this.playerSprite, true, 0.1, 0.1);
@@ -141,6 +159,49 @@ export class WorldScene extends Phaser.Scene {
             callback: () => this.checkZoneTransition(),
             loop: true,
         });
+
+        // Treasure chests scattered in the current zone
+        this.chests = [];
+        this.spawnWorldChests();
+
+        // Battle resume → remove corpse, spill loot bags into the world
+        this.events.on('resume', (_sys, data) => this.onBattleResume(data));
+    }
+
+    onBattleResume(data) {
+        if (!data?.victory) return;
+
+        // Remove the defeated monster from the overworld
+        const idx = this.monsters.findIndex((m) =>
+            (data.worldMonsterRef && m === data.worldMonsterRef)
+            || (m.id === data.monsterId && m.sprite?.active)
+        );
+        let dropX = this.playerSprite?.x || 0;
+        let dropY = this.playerSprite?.y || 0;
+        if (idx >= 0) {
+            const m = this.monsters[idx];
+            dropX = m.sprite?.x ?? dropX;
+            dropY = m.sprite?.y ?? dropY;
+            m.sprite?.destroy();
+            m.hpBar?.destroy?.();
+            m.zone?.destroy?.();
+            this.monsters.splice(idx, 1);
+        }
+
+        // Extra world loot sparkle even though inventory already got battle loot —
+        // spill a visible bag for bonus materials / immersion.
+        if (data.loot?.items?.length) {
+            this.spawnLootBag(dropX + 20, dropY + 10, {
+                gold: Math.floor((data.loot.bonusGold || 0) * 0.5),
+                items: Math.random() < 0.35
+                    ? [{ id: 'magic_dust', count: 1, name: 'Magic Dust', rarity: 'uncommon' }]
+                    : [],
+            });
+        }
+
+        this.showNotification('Victory!');
+        EffectsSystem.ensureAnims(this);
+        EffectsSystem.play(this, dropX, dropY, 'burst', { scale: 1.4, depth: 40 });
     }
 
     createWorld() {
@@ -187,34 +248,43 @@ export class WorldScene extends Phaser.Scene {
         const w = L.w;
         const h = L.h;
 
-        // The 16x16 "middle" tiles are the seamless fillers in this pack, so
-        // they are the right thing to repeat. The 48x96 tiles are full scene
-        // pieces and would look wrong tiled across the whole world.
-        //
-        // Slightly translucent so the zone backdrop reads through the grass
-        // instead of being buried under it.
-        this.ground = this.add.tileSprite(0, 0, w, h, 'tile_Grass_Middle')
-            .setOrigin(0, 0)
-            .setScrollFactor(0)
-            .setDepth(1)
-            .setAlpha(0.82);
+        // Never call tileSprite on a missing key — that used to freeze Capacitor
+        // WebViews when gameplay tiles were still deferred.
+        const grassKey = this.textures.exists('tile_Grass_Middle')
+            ? 'tile_Grass_Middle'
+            : null;
 
-        // Dark zones are conveyed by tinting the one object rather than by
-        // drawing a second layer.
+        if (grassKey) {
+            this.ground = this.add.tileSprite(0, 0, w, h, grassKey)
+                .setOrigin(0, 0)
+                .setScrollFactor(0)
+                .setDepth(1)
+                .setAlpha(0.82);
+        } else {
+            this.ground = this.add.rectangle(0, 0, w, h, 0x2a4a2a, 0.85)
+                .setOrigin(0, 0)
+                .setScrollFactor(0)
+                .setDepth(1);
+            // Rectangle has no tilePosition — stub so the update loop stays safe.
+            this.ground.tilePositionX = 0;
+            this.ground.tilePositionY = 0;
+        }
+
         const zoneTint = {
             cave: 0x8a8a9a,
             dungeon: 0x6a6a7a,
             abyss: 0x4a4a5a,
             mountain: 0x9a9aaa,
         };
-        if (zoneTint[this.currentZone]) {
+        if (grassKey && zoneTint[this.currentZone] && this.ground.setTint) {
             this.ground.setTint(zoneTint[this.currentZone]);
         }
 
-        // Path zones get a second, faint pass so they read as worn ground
-        // without costing another 4,800 objects.
         this.groundOverlay = null;
-        if (this.currentZone === 'ruins' || this.currentZone === 'arena') {
+        if (
+            (this.currentZone === 'ruins' || this.currentZone === 'arena')
+            && this.textures.exists('tile_Path_Middle')
+        ) {
             this.groundOverlay = this.add.tileSprite(0, 0, w, h, 'tile_Path_Middle')
                 .setOrigin(0, 0)
                 .setScrollFactor(0)
@@ -246,7 +316,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     addZoneDecorations() {
-        // Add some decorative elements based on zone
+        if (!this.textures.exists('item_barrel')) return;
         const decorCount = 10;
         for (let i = 0; i < decorCount; i++) {
             const x = Math.random() * GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE;
@@ -303,33 +373,51 @@ export class WorldScene extends Phaser.Scene {
 
         // === TOP-RIGHT: Menu Buttons (packed so they never spill left) ===
         const btnData = [
+            { label: 'Map', scene: 'Map' },
             { label: 'Items', scene: 'Inventory' },
             { label: 'Skills', scene: 'Skills' },
             { label: 'Quests', scene: 'QuestLog' },
             { label: 'Stats', scene: 'Stats' },
             { label: 'Save', action: 'save' },
         ];
-        const topBtnW = Math.max(58, Math.min(78, (width * 0.42) / btnData.length - 6));
+        const topBtnW = Math.max(52, Math.min(72, (width * 0.48) / btnData.length - 5));
         const topBtnH = Math.max(30, L.font(32));
         btnData.forEach((btn, i) => {
-            const x = width - L.pad - topBtnW / 2 - i * (topBtnW + 6);
+            const x = width - L.pad - topBtnW / 2 - i * (topBtnW + 5);
             const button = UIComponents.createButton(this, x, L.pad + topBtnH / 2, btn.label, () => {
                 if (btn.action === 'save') {
                     this.saveGame(false);
                     return;
                 }
-                this.scene.launch(btn.scene, { player: this.player });
+                this.scene.launch(btn.scene, {
+                    player: this.player,
+                    currentZone: this.currentZone,
+                });
                 this.scene.pause();
             }, {
                 width: topBtnW,
                 height: topBtnH,
-                fontSize: L.font(12),
-                variant: btn.action === 'save' ? 'primary' : 'ghost',
-                bgColor: btn.action === 'save' ? 0x2a3a4a : undefined,
+                fontSize: L.font(11),
+                variant: btn.action === 'save' ? 'primary' : (btn.label === 'Map' ? 'primary' : 'ghost'),
+                bgColor: btn.action === 'save' ? 0x2a3a4a : (btn.label === 'Map' ? 0x1a3a2a : undefined),
                 depth: 300,
             });
             button.pinToHud();
         });
+
+        // Quest compass HUD
+        this.questHud = this.add.text(L.pad, L.h - L.pad - L.font(28), '', {
+            fontFamily: 'Georgia, serif',
+            fontSize: `${L.font(12)}px`,
+            color: '#ffd700',
+            stroke: '#000',
+            strokeThickness: 3,
+            wordWrap: { width: width * 0.42 },
+        }).setScrollFactor(0).setDepth(120).setOrigin(0, 1);
+        this.refreshQuestHud();
+
+        this.stepsSinceEncounter = 0;
+        this._encounterLock = false;
 
         // === BOTTOM-RIGHT: Action Buttons ===
         const atk = Math.max(58, L.font(64));
@@ -360,6 +448,28 @@ export class WorldScene extends Phaser.Scene {
         this.minimap.strokeRoundedRect(mmX, mmY, mmW, mmH, 8);
 
         this.minimapDot = this.add.circle(mmX + mmW / 2, mmY + mmH / 2, 4, 0xc9a84c).setScrollFactor(0).setDepth(101);
+
+        // Tap minimap to open full map
+        const mmHit = this.add.zone(mmX + mmW / 2, mmY + mmH / 2, mmW, mmH)
+            .setScrollFactor(0)
+            .setDepth(102)
+            .setInteractive();
+        mmHit.on('pointerdown', () => {
+            this.scene.launch('Map', { player: this.player, currentZone: this.currentZone });
+            this.scene.pause();
+        });
+    }
+
+    refreshQuestHud() {
+        if (!this.questHud) return;
+        const dest = getActiveDestination(this.player);
+        if (!dest) {
+            this.questHud.setText('');
+            return;
+        }
+        const here = dest.zone === this.currentZone;
+        const arrow = here ? '★ Here' : `→ ${dest.zoneName}`;
+        this.questHud.setText(`Quest: ${dest.questName}\n${dest.objective}\n${arrow} · ${dest.label}`);
     }
 
     createActionButtons() {
@@ -376,10 +486,15 @@ export class WorldScene extends Phaser.Scene {
         });
 
         for (const npc of npcData) {
+            const key = this.textures.exists(npc.sprite)
+                ? npc.sprite
+                : (this.textures.exists('npc_1') ? 'npc_1' : null);
+            if (!key) continue;
+
             const sprite = this.add.sprite(
                 npc.x * GAME_CONFIG.TILE_SIZE,
                 npc.y * GAME_CONFIG.TILE_SIZE,
-                npc.sprite
+                key
             ).setScale(1.2).setDepth(5);
 
             // Name tag
@@ -420,7 +535,10 @@ export class WorldScene extends Phaser.Scene {
             const py = this.playerSprite.y;
             if (Math.abs(x - px) < 300 && Math.abs(y - py) < 300) continue;
 
-            const sprite = this.add.sprite(x, y, `monster_${monsterData.sprite.split('/').pop().replace('.png', '')}`)
+            const mKey = `monster_${monsterData.sprite.split('/').pop().replace('.png', '')}`;
+            if (!this.textures.exists(mKey)) continue;
+
+            const sprite = this.add.sprite(x, y, mKey)
                 .setScale(monsterData.scale || 1)
                 .setDepth(4);
 
@@ -435,18 +553,17 @@ export class WorldScene extends Phaser.Scene {
             // Interaction
             const zone = this.add.zone(x, y, 60, 60);
             zone.setInteractive();
-            zone.on('pointerdown', () => {
-                this.startCombat(monsterId, sprite, hpBar);
-            });
 
-            this.monsters.push({
+            const entry = {
                 id: monsterId,
                 data: monsterData,
                 sprite,
                 hpBar,
                 zone,
                 currentHp: monsterData.hp,
-            });
+            };
+            zone.on('pointerdown', () => this.startCombat(monsterId, sprite, hpBar, entry));
+            this.monsters.push(entry);
         }
     }
 
@@ -486,14 +603,123 @@ export class WorldScene extends Phaser.Scene {
         }
     }
 
-    startCombat(monsterId, sprite, hpBar) {
+    startCombat(monsterId, sprite, hpBar, monsterRef = null) {
         this.scene.launch('Battle', {
             player: this.player,
             monsterId,
             monsterSprite: sprite,
             monsterHpBar: hpBar,
+            monsterRef,
         });
         this.scene.pause();
+    }
+
+    spawnWorldChests() {
+        (this.chests || []).forEach((c) => {
+            c.sprite?.destroy();
+            c.zone?.destroy();
+        });
+        this.chests = [];
+
+        const count = this.currentZone === 'town' ? 1 : 2 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < count; i++) {
+            const x = Phaser.Math.Between(120, GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE - 120);
+            const y = Phaser.Math.Between(120, GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE - 120);
+            const kind = Math.random() < 0.22 ? 'gold' : 'wood';
+            const key = kind === 'gold'
+                ? (this.textures.exists('item_chest_gold_closed') ? 'item_chest_gold_closed' : null)
+                : (this.textures.exists('item_chest_wood_closed') ? 'item_chest_wood_closed' : null);
+            if (!key) continue;
+
+            const sprite = this.add.image(x, y, key).setScale(0.7).setDepth(3);
+            const zone = this.add.zone(x, y, 70, 70).setInteractive();
+            const chest = { kind, sprite, zone, opened: false, x, y };
+            zone.on('pointerdown', () => this.openChest(chest));
+            this.chests.push(chest);
+        }
+    }
+
+    openChest(chest) {
+        if (!chest || chest.opened) return;
+        const dist = Phaser.Math.Distance.Between(
+            this.playerSprite.x, this.playerSprite.y, chest.x, chest.y
+        );
+        if (dist > 120) {
+            this.showNotification('Move closer to the chest');
+            return;
+        }
+
+        if (chest.kind === 'gold' && this.player.hasItem('loot_chest_key')) {
+            this.player.removeItem('loot_chest_key', 1);
+        } else if (chest.kind === 'gold' && !this.player.hasItem('loot_chest_key')) {
+            // Gold chests can still open but note the lock — allow with warning for UX
+            // unless we want strict keys. Soft: 40% fail without key.
+            if (Math.random() < 0.4) {
+                this.showNotification('Locked! Need a Bronze Key');
+                return;
+            }
+        }
+
+        chest.opened = true;
+        const openKey = chest.kind === 'gold' ? 'item_chest_gold_open' : 'item_chest_wood_open';
+        if (this.textures.exists(openKey)) chest.sprite.setTexture(openKey);
+
+        const loot = LootSystem.rollChest(chest.kind, this.player.luk || 0);
+        LootSystem.grant(this.player, loot);
+        EffectsSystem.ensureAnims(this);
+        EffectsSystem.play(this, chest.x, chest.y, 'burst', { scale: 1.6 });
+        EffectsSystem.play(this, chest.x, chest.y, 'sparkle', { scale: 1.4 });
+
+        const names = (loot.items || []).map((i) => i.name).slice(0, 3).join(', ');
+        this.showNotification(
+            `Chest! +${loot.gold}g${names ? ` · ${names}` : ''}`
+        );
+        this.audio?.play?.('fanfare');
+    }
+
+    spawnLootBag(x, y, loot) {
+        const key = this.textures.exists('item_crate')
+            ? 'item_crate'
+            : (this.textures.exists('item_barrel') ? 'item_barrel' : null);
+        const sprite = key
+            ? this.add.image(x, y, key).setScale(0.55).setDepth(4)
+            : this.add.circle(x, y, 10, 0xc9a84c).setDepth(4);
+
+        this.tweens.add({
+            targets: sprite,
+            y: y - 8,
+            duration: 700,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut',
+        });
+
+        const bag = { sprite, loot, x, y, claimed: false };
+        this.droppedItems.push(bag);
+        return bag;
+    }
+
+    tryPickupLoot() {
+        if (!this.playerSprite || !this.droppedItems?.length) return;
+        for (const bag of this.droppedItems) {
+            if (bag.claimed) continue;
+            const dist = Phaser.Math.Distance.Between(
+                this.playerSprite.x, this.playerSprite.y, bag.x, bag.y
+            );
+            if (dist > 55) continue;
+            bag.claimed = true;
+            const granted = LootSystem.grant(this.player, bag.loot);
+            bag.sprite?.destroy();
+            if (granted.length || bag.loot?.gold) {
+                this.showNotification(
+                    granted.length
+                        ? `Picked up ${granted.map((g) => g.name).join(', ')}`
+                        : `Picked up ${bag.loot.gold} gold`
+                );
+            }
+            EffectsSystem.play(this, bag.x, bag.y, 'sparkle', { scale: 1.2 });
+        }
+        this.droppedItems = this.droppedItems.filter((b) => !b.claimed);
     }
 
     playerAttack() {
@@ -514,7 +740,7 @@ export class WorldScene extends Phaser.Scene {
         }
 
         if (nearest) {
-            this.startCombat(nearest.id, nearest.sprite, nearest.hpBar);
+            this.startCombat(nearest.id, nearest.sprite, nearest.hpBar, nearest);
         } else {
             this.showNotification('No enemy in range!');
         }
@@ -829,17 +1055,20 @@ export class WorldScene extends Phaser.Scene {
         // Update buffs
         this.player.updateBuffs();
 
+        // Auto-pickup nearby loot bags
+        this.tryPickupLoot();
+
         // Scroll the ground with the camera. The ground is viewport-sized and
         // fixed to the screen, so it has to be told where the camera is looking
         // or it would stay put while the world moved underneath it.
         const cam = this.cameras.main;
-        if (this.ground) {
+        if (this.ground && this.ground.tilePositionX !== undefined && typeof this.ground.setTexture === 'function') {
             this.ground.tilePositionX = cam.scrollX;
             this.ground.tilePositionY = cam.scrollY;
         }
         if (this.groundOverlay) {
             this.groundOverlay.tilePositionX = cam.scrollX;
-            this.ground.tilePositionY = cam.scrollY;
+            this.groundOverlay.tilePositionY = cam.scrollY;
         }
     }
 
@@ -883,6 +1112,8 @@ export class WorldScene extends Phaser.Scene {
         if (this.player.x !== prevX || this.player.y !== prevY) {
             this.player.stats.tilesWalked = (this.player.stats.tilesWalked || 0) + 1;
             this.achievements.check();
+            this.stepsSinceEncounter = (this.stepsSinceEncounter || 0) + 1;
+            this.tryRandomEncounter();
         }
 
         // Play step sound + dust
@@ -898,6 +1129,32 @@ export class WorldScene extends Phaser.Scene {
         this.xpBar.updateValue(this.player.exp, this.player.expToNext || 100);
         this.goldText.setText(`Gold: ${this.player.gold}`);
         this.nameText.setText(`${formatDisplayName(this.player)} Lv.${this.player.level}`);
+        this.refreshQuestHud?.();
+    }
+
+    tryRandomEncounter() {
+        if (this._encounterLock || this.isInDialogue || this.currentZone === 'town') return;
+        const roll = EncounterSystem.rollStep(
+            this.currentZone,
+            this.player.level || 1,
+            this.stepsSinceEncounter || 0
+        );
+        if (!roll) return;
+
+        this.stepsSinceEncounter = 0;
+        this._encounterLock = true;
+        const m = MONSTERS[roll.monsterId];
+        const label = roll.isBoss ? `BOSS AMBUSH: ${m?.name || roll.monsterId}!`
+            : roll.isAmbush ? `Ambush! ${m?.name || roll.monsterId}!`
+            : `Encounter: ${m?.name || roll.monsterId}`;
+        this.showNotification(label);
+        EffectsSystem.ensureAnims(this);
+        EffectsSystem.play(this, this.playerSprite.x, this.playerSprite.y, roll.isBoss ? 'boom' : 'sparkle', { scale: 1.5 });
+
+        this.time.delayedCall(450, () => {
+            this.startCombat(roll.monsterId, null, null, null);
+            this._encounterLock = false;
+        });
     }
 
     updateMonsters(delta) {
@@ -907,7 +1164,6 @@ export class WorldScene extends Phaser.Scene {
                 continue;
             }
 
-            // Simple AI: move toward player if aggressive
             if (m.data.aggressive) {
                 const dist = Phaser.Math.Distance.Between(
                     m.sprite.x, m.sprite.y,
@@ -917,12 +1173,27 @@ export class WorldScene extends Phaser.Scene {
                     const angle = Phaser.Math.Angle.Between(m.sprite.x, m.sprite.y, this.playerSprite.x, this.playerSprite.y);
                     m.sprite.x += Math.cos(angle) * m.data.spd * 0.5 * (delta / 1000);
                     m.sprite.y += Math.sin(angle) * m.data.spd * 0.5 * (delta / 1000);
+                    if (m.zone) {
+                        m.zone.x = m.sprite.x;
+                        m.zone.y = m.sprite.y;
+                    }
+                }
+                // Auto-engage when they close in
+                const engage = EncounterSystem.aggroEngageDistance(m.data);
+                if (engage && dist < engage && !this._encounterLock) {
+                    this._encounterLock = true;
+                    this.showNotification(`${m.data.name} attacks!`);
+                    this.time.delayedCall(200, () => {
+                        this.startCombat(m.id, m.sprite, m.hpBar, m);
+                        this._encounterLock = false;
+                    });
                 }
             }
 
-            // Update HP bar position
-            m.hpBar.x = m.sprite.x - 25;
-            m.hpBar.y = m.sprite.y - 40;
+            if (m.hpBar) {
+                m.hpBar.x = m.sprite.x - 25;
+                m.hpBar.y = m.sprite.y - 40;
+            }
         }
     }
 }

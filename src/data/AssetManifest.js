@@ -91,13 +91,15 @@ const ITEMS = [
 ];
 
 // --- Tiles ---
+// Needed on the first World frame. Kept as critical so a cold device never
+// paints the world before grass exists (that used to freeze Capacitor WebViews).
 const TILES = [
     'Grass_Middle', 'Path_Tile', 'Cliff_Tile', 'Water_Tile',
     'Path_Middle', 'Water_Middle', 'Beach_Tile', 'FarmLand_Tile',
 ].map((name) => ({
     key: `tile_${name}`,
     file: `assets/tiles/${name}.png`,
-    group: 'gameplay',
+    group: 'critical',
 }));
 
 // --- Backgrounds (code uses bg_1 .. bg_16) ---

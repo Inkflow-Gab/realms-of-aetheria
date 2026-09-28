@@ -45,6 +45,8 @@ export const ITEM_TYPES = {
     ANTIDOTE: { id: 'antidote', name: 'Antidote', category: 'consumable', slot: null, icon: 'items/potions/antidote' },
     TOWN_SCROLL: { id: 'town_scroll', name: 'Town Portal Scroll', category: 'consumable', slot: null, icon: 'items/potions/scroll' },
     FOOD: { id: 'food', name: 'Food', category: 'consumable', slot: null, icon: 'items/food/bread' },
+    MATERIAL: { id: 'material', name: 'Material', category: 'material', slot: null, icon: 'items/other/material' },
+    KEY: { id: 'key', name: 'Key', category: 'material', slot: null, icon: 'items/other/key' },
 };
 
 const SLOT_BY_TYPE = Object.fromEntries(
@@ -385,6 +387,48 @@ export const ITEMS = {
         id: 'meat', name: 'Cooked Meat', type: 'food', rarity: 'common',
         effect: { heal: 50, duration: 60 }, level: 1, price: 15, desc: 'Restores 50 HP over 60 sec.',
         icon: 'items/food/meat'
+    },
+
+    // === CRAFTING / LOOT MATERIALS (sellables + filler drops) ===
+    slime_gel: {
+        id: 'slime_gel', name: 'Slime Gel', type: 'material', rarity: 'common',
+        level: 1, price: 8, desc: 'Sticky residue. Alchemists buy these.',
+        icon: 'items/other/gel'
+    },
+    bat_wing: {
+        id: 'bat_wing', name: 'Bat Wing', type: 'material', rarity: 'common',
+        level: 1, price: 10, desc: 'Light and brittle. Useful for charms.',
+        icon: 'items/other/wing'
+    },
+    goblin_ear: {
+        id: 'goblin_ear', name: 'Goblin Ear', type: 'material', rarity: 'common',
+        level: 1, price: 12, desc: 'Proof of a goblin hunt. Merchants smirk.',
+        icon: 'items/other/ear'
+    },
+    bone_shard: {
+        id: 'bone_shard', name: 'Bone Shard', type: 'material', rarity: 'common',
+        level: 1, price: 11, desc: 'Cold to the touch.',
+        icon: 'items/other/bone'
+    },
+    monster_hide: {
+        id: 'monster_hide', name: 'Monster Hide', type: 'material', rarity: 'common',
+        level: 1, price: 14, desc: 'Tough leather for craftsmen.',
+        icon: 'items/other/hide'
+    },
+    magic_dust: {
+        id: 'magic_dust', name: 'Magic Dust', type: 'material', rarity: 'uncommon',
+        level: 5, price: 35, desc: 'Glitters with faint aether.',
+        icon: 'items/other/dust'
+    },
+    boss_trophy: {
+        id: 'boss_trophy', name: 'Boss Trophy', type: 'material', rarity: 'rare',
+        level: 10, price: 120, desc: 'A hard-won prize. Collectors pay well.',
+        icon: 'items/other/trophy'
+    },
+    loot_chest_key: {
+        id: 'loot_chest_key', name: 'Bronze Key', type: 'key', rarity: 'uncommon',
+        level: 1, price: 40, desc: 'Opens locked wooden chests in the wild.',
+        icon: 'items/other/key'
     },
 };
 

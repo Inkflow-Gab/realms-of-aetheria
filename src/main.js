@@ -7,6 +7,7 @@ import { BootScene } from './scenes/BootScene.js';
 import { PreloadScene } from './scenes/PreloadScene.js';
 import { MainMenuScene } from './scenes/MainMenuScene.js';
 import { CharacterCreationScene } from './scenes/CharacterCreationScene.js';
+import { WorldLoadScene } from './scenes/WorldLoadScene.js';
 import { WorldScene } from './scenes/WorldScene.js';
 import { BattleScene } from './scenes/BattleScene.js';
 import { InventoryScene } from './scenes/InventoryScene.js';
@@ -16,6 +17,7 @@ import { StatsScene } from './scenes/StatsScene.js';
 import { ShopScene } from './scenes/ShopScene.js';
 import { SettingsScene } from './scenes/SettingsScene.js';
 import { CosmeticsScene } from './scenes/CosmeticsScene.js';
+import { MapScene } from './scenes/MapScene.js';
 import { SettingsSystem } from './systems/SettingsSystem.js';
 
 // ============================================
@@ -82,6 +84,7 @@ const config = {
         PreloadScene,
         MainMenuScene,
         CharacterCreationScene,
+        WorldLoadScene,
         WorldScene,
         BattleScene,
         InventoryScene,
@@ -91,6 +94,7 @@ const config = {
         ShopScene,
         SettingsScene,
         CosmeticsScene,
+        MapScene,
     ],
 };
 

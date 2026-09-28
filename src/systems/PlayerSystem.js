@@ -28,8 +28,6 @@ export class PlayerSystem {
         this.gold = 150;
         this.skillPoints = 0;
 
-        // Running stats the achievements test against.
-        this.stats = { tilesWalked: 0, zonesVisited: ['town'] };
         // Achievement ids already unlocked. Persisted with the save.
         this.achievements = [];
 
@@ -43,8 +41,14 @@ export class PlayerSystem {
             luk: 10 + this.race.bonuses.luk,
         };
 
-        // Current stats (base + equipment + buffs)
-        this.stats = { ...this.baseStats };
+        // Combat stats + journey counters live on the same object so older
+        // saves and Achievements.js keep working. recalcStats must preserve
+        // tilesWalked / zonesVisited (it used to wipe them and break progress).
+        this.stats = {
+            ...this.baseStats,
+            tilesWalked: 0,
+            zonesVisited: ['town'],
+        };
 
         // HP/MP
         this.maxHp = base.hp + this.class.statGrowth.hp * this.level;
@@ -152,14 +156,9 @@ export class PlayerSystem {
             this.addItem(itemId, 1);
         }
 
-        // Equip the first weapon and the first armour in the kit.
-        const weapon = kit.find(([id]) => {
-            const it = ITEMS[id];
-            return it && it.slot !== 'ring' && it.slot !== 'neck' && it.slot !== 'waist'
-                && it.slot !== 'back' && it.slot !== 'head' && it.slot !== 'feet'
-                && it.slot !== 'hands' && it.slot !== 'offhand' && it.slot !== 'legs';
-        });
-        const armor = kit.find(([id]) => ITEMS[id]?.slot === 'chest');
+        // Equip by resolved slot (items use `type`, not always `slot`).
+        const weapon = kit.find(([id]) => getEquipSlot(ITEMS[id]) === 'weapon');
+        const armor = kit.find(([id]) => getEquipSlot(ITEMS[id]) === 'chest');
 
         if (weapon) this.equip(weapon[0]);
         if (armor) this.equip(armor[0]);
@@ -191,7 +190,11 @@ export class PlayerSystem {
         const oldMaxHp = this.maxHp;
         const oldMaxMp = this.maxMp;
 
-        this.stats = { ...this.baseStats };
+        const journey = {
+            tilesWalked: this.stats?.tilesWalked || 0,
+            zonesVisited: this.stats?.zonesVisited || ['town'],
+        };
+        this.stats = { ...this.baseStats, ...journey };
 
         let equipAtk = 0;
         let equipDef = 0;
@@ -503,7 +506,11 @@ export class PlayerSystem {
         this.buffs = [];
         this.statusEffects = {};
         this.achievements = data.achievements || [];
-        this.stats = { tilesWalked: 0, zonesVisited: ['town'], ...(data.stats || {}) };
+        // Seed journey counters before recalc so they survive the rewrite.
+        this.stats = {
+            tilesWalked: data.stats?.tilesWalked || 0,
+            zonesVisited: data.stats?.zonesVisited || ['town'],
+        };
         this.starterKit = data.starterKit || null;
         this.recalcStats();
     }
