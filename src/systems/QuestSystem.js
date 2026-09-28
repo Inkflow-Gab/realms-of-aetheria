@@ -5,8 +5,14 @@
 import { QUESTS } from '../data/Quests.js';
 
 export class QuestSystem {
-    constructor(player) {
+    /**
+     * @param {PlayerSystem} player
+     * @param {Phaser.Scene} [scene] Optional, so quest completion can notify
+     *        the achievement system. Battle and World both pass it.
+     */
+    constructor(player, scene = null) {
         this.player = player;
+        this.scene = scene;
     }
 
     acceptQuest(questId) {
@@ -77,6 +83,9 @@ export class QuestSystem {
 
         // Move to completed list
         this.player.completedQuests.push(questId);
+
+        // Check quest achievements now that the list has changed.
+        this.scene?.achievements?.check();
         delete this.player.quests[questId];
 
         // Chain quest

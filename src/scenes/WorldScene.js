@@ -11,6 +11,7 @@ import { VirtualJoystick } from '../ui/VirtualJoystick.js';
 import { UIComponents } from '../ui/UIComponents.js';
 import { layout, addBetaBadge } from '../ui/Layout.js';
 import { SettingsSystem } from '../systems/SettingsSystem.js';
+import { AchievementSystem } from '../systems/AchievementSystem.js';
 import { COSMETIC_AURAS, formatDisplayName } from '../data/Cosmetics.js';
 import { DialogueBox } from '../ui/DialogueBox.js';
 import { MONSTERS, ZONE_SPAWNS } from '../data/Monsters.js';
@@ -49,9 +50,11 @@ export class WorldScene extends Phaser.Scene {
 
         // === SYSTEMS ===
         this.saveSystem = new SaveSystem();
-        this.questSystem = new QuestSystem(this.player);
+        this.questSystem = new QuestSystem(this.player, this);
         this.audio = new AudioSystem();
         this.audio.init(this);
+        this.achievements = new AchievementSystem(this.player);
+        this.achievements.init(this);
 
         // === WORLD SETUP ===
         this.currentZone = this.player.zone || 'town';
@@ -106,6 +109,25 @@ export class WorldScene extends Phaser.Scene {
         // === PLAY MUSIC ===
         this.audio.playMusic(this.currentZone === 'town' ? 'town' : 'battle');
 
+        // === LOADING TRANSITION ===
+        // Fade in from black so entering the world reads as a transition
+        // rather than a hard cut, and so a slow first frame is never visible.
+        this.cameras.main.fadeIn(450, 10, 10, 26);
+
+        // Zone banner: names where the player has arrived.
+        this.showZoneBanner();
+
+        // === TAP PARTICLES ===
+        // A small burst wherever the player taps, so touches feel responsive
+        // even when they are not on a button.
+        this.input.on('pointerdown', (pointer) => this.spawnTapParticles(pointer));
+
+        // === STARTER KIT ===
+        // Only on a brand-new hero, and only once.
+        if (!this.loadSave && !this.starterKitGiven) {
+            this.giveStarterKit();
+        }
+
         // === AUTO-SAVE ===
         this.time.addEvent({
             delay: 30000,
@@ -122,12 +144,18 @@ export class WorldScene extends Phaser.Scene {
     }
 
     createWorld() {
-        const width = this.cameras.main.width;
-        const height = this.cameras.main.height;
+        const L = layout(this);
 
-        // Background based on zone
+        // Zone backdrop, fixed to the viewport. It used to be placed at the
+        // camera centre in world space, so the moment the camera followed the
+        // player the backdrop scrolled away and the world looked empty.
         const bgKey = this.getZoneBackground();
-        this.add.image(width / 2, height / 2, bgKey).setDisplaySize(width, height).setDepth(0);
+        if (this.textures.exists(bgKey)) {
+            this.add.image(L.cx, L.cy, bgKey)
+                .setDisplaySize(L.w, L.h)
+                .setScrollFactor(0)
+                .setDepth(0);
+        }
 
         // Ground tiles
         this.buildGroundLayer();
@@ -137,27 +165,39 @@ export class WorldScene extends Phaser.Scene {
     }
 
     /**
-     * The ground, as a single GPU-tiled object.
+     * The ground, as a single GPU-tiled object the size of the viewport.
      *
-     * This used to be a nested loop over MAP_WIDTH x MAP_HEIGHT creating one
-     * Image per tile -- 4,800 separate Game Objects. Every one of those costs
-     * its own draw call and its own transform update on every single frame,
-     * which is what was dropping the frame rate on device.
+     * Two earlier versions were both broken in different ways:
      *
-     * A TileSprite repeats one texture on the GPU instead, so the entire
-     * ground is a single draw call and a few kilobytes of memory no matter how
-     * large the world is. Zone mood comes from tinting, which is free.
+     *   1. A nested loop over MAP_WIDTH x MAP_HEIGHT created one Image per
+     *      tile -- 4,800 Game Objects, each with its own draw call. That
+     *      destroyed the frame rate.
+     *
+     *   2. A single TileSprite covering the whole world fixed the draw calls
+     *      but was 5120x3840 px. That exceeds MAX_TEXTURE_SIZE on most mobile
+     *      GPUs (2048-4096), so the texture allocation failed and the device
+     *      froze on entering the world.
+     *
+     * This version is viewport-sized and scrolls by writing the camera's
+     * scroll offset into tilePosition each frame. One small quad, one draw
+     * call, a few kilobytes of memory -- regardless of how large the world is.
      */
     buildGroundLayer() {
-        const worldW = GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE;
-        const worldH = GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE;
+        const L = layout(this);
+        const w = L.w;
+        const h = L.h;
 
         // The 16x16 "middle" tiles are the seamless fillers in this pack, so
         // they are the right thing to repeat. The 48x96 tiles are full scene
         // pieces and would look wrong tiled across the whole world.
-        const ground = this.add.tileSprite(0, 0, worldW, worldH, 'tile_Grass_Middle')
+        //
+        // Slightly translucent so the zone backdrop reads through the grass
+        // instead of being buried under it.
+        this.ground = this.add.tileSprite(0, 0, w, h, 'tile_Grass_Middle')
             .setOrigin(0, 0)
-            .setDepth(1);
+            .setScrollFactor(0)
+            .setDepth(1)
+            .setAlpha(0.82);
 
         // Dark zones are conveyed by tinting the one object rather than by
         // drawing a second layer.
@@ -168,19 +208,21 @@ export class WorldScene extends Phaser.Scene {
             mountain: 0x9a9aaa,
         };
         if (zoneTint[this.currentZone]) {
-            ground.setTint(zoneTint[this.currentZone]);
+            this.ground.setTint(zoneTint[this.currentZone]);
         }
 
         // Path zones get a second, faint pass so they read as worn ground
         // without costing another 4,800 objects.
+        this.groundOverlay = null;
         if (this.currentZone === 'ruins' || this.currentZone === 'arena') {
-            this.add.tileSprite(0, 0, worldW, worldH, 'tile_Path_Middle')
+            this.groundOverlay = this.add.tileSprite(0, 0, w, h, 'tile_Path_Middle')
                 .setOrigin(0, 0)
+                .setScrollFactor(0)
                 .setDepth(1)
-                .setAlpha(0.35);
+                .setAlpha(0.3);
         }
 
-        return ground;
+        return this.ground;
     }
 
     getZoneBackground() {
@@ -523,6 +565,15 @@ export class WorldScene extends Phaser.Scene {
         if (newZone !== this.currentZone) {
             this.currentZone = newZone;
             this.player.zone = newZone;
+
+            // Track zones visited for the exploration achievements.
+            const visited = this.player.stats.zonesVisited || (this.player.stats.zonesVisited = []);
+            if (!visited.includes(newZone)) {
+                visited.push(newZone);
+            }
+
+            this.saveGame(true);
+            this.achievements.check();
             this.scene.restart({ player: this.player });
         }
     }
@@ -557,6 +608,197 @@ export class WorldScene extends Phaser.Scene {
         });
     }
 
+    /**
+     * Names the zone the player has just entered.
+     *
+     * Without this the world looks identical for the first few seconds and
+     * there is no sense of arrival after a zone change.
+     */
+    showZoneBanner() {
+        const L = layout(this);
+        const name = this.getZoneName();
+
+        const banner = this.add.text(L.cx, L.h * 0.32, name, {
+            fontFamily: 'Georgia, serif',
+            fontSize: `${L.font(34)}px`,
+            color: '#f0e6d3',
+            stroke: '#000000',
+            strokeThickness: 5,
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(300).setAlpha(0);
+
+        const sub = this.add.text(L.cx, L.h * 0.32 + L.font(30), 'Realms of Aetheria', {
+            fontFamily: 'Georgia, serif',
+            fontSize: `${L.font(14)}px`,
+            color: '#c9a84c',
+            stroke: '#000000',
+            strokeThickness: 3,
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(300).setAlpha(0);
+
+        this.tweens.add({
+            targets: [banner, sub],
+            alpha: 1,
+            duration: 500,
+            ease: 'Sine.easeOut',
+        });
+        this.tweens.add({
+            targets: [banner, sub],
+            alpha: 0,
+            y: '-=24',
+            delay: 1900,
+            duration: 600,
+            ease: 'Sine.easeIn',
+            onComplete: () => { banner.destroy(); sub.destroy(); },
+        });
+    }
+
+    /**
+     * A small burst of sparks wherever the player taps.
+     *
+     * Touchscreens give no hover feedback, so without this a tap that misses
+     * every button feels like the game has frozen.
+     */
+    spawnTapParticles(pointer) {
+        const gfx = SettingsSystem.getGraphicsProfile();
+        if (!gfx.particles) return;
+
+        const L = layout(this);
+        const count = gfx.quality === 'high' ? 10 : 6;
+
+        for (let i = 0; i < count; i++) {
+            const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5;
+            const dist = L.font(10) + Math.random() * L.font(14);
+            const px = pointer.worldX + Math.cos(angle) * dist;
+            const py = pointer.worldY + Math.sin(angle) * dist;
+
+            const dot = this.add.circle(px, py, L.font(2.2), 0xffd700, 0.9)
+                .setDepth(150);
+
+            this.tweens.add({
+                targets: dot,
+                alpha: 0,
+                scale: 0.2,
+                x: px + Math.cos(angle) * L.font(16),
+                y: py + Math.sin(angle) * L.font(16),
+                duration: 380 + Math.random() * 220,
+                ease: 'Cubic.easeOut',
+                onComplete: () => dot.destroy(),
+            });
+        }
+    }
+
+    /**
+     * Footstep dust while moving.
+     *
+     * Very subtle -- a couple of fading dots under the player -- but it makes
+     * movement read as movement rather than a sliding sprite.
+     */
+    spawnFootstepParticles() {
+        const gfx = SettingsSystem.getGraphicsProfile();
+        if (!gfx.particles) return;
+
+        const L = layout(this);
+        const dot = this.add.circle(
+            this.playerSprite.x + (Math.random() - 0.5) * L.font(8),
+            this.playerSprite.y + L.font(6),
+            L.font(1.8),
+            0xc9a84c,
+            0.5
+        ).setDepth(9);
+
+        this.tweens.add({
+            targets: dot,
+            alpha: 0,
+            scale: 0.3,
+            duration: 300,
+            onComplete: () => dot.destroy(),
+        });
+    }
+
+    /**
+     * The starter kit every new hero receives.
+     *
+     * The actual items are chosen by PlayerSystem.applyStarterKit based on the
+     * hero's class and race; this method only displays what was given. Keeping
+     * the two separate means the kit can change without touching the UI.
+     */
+    giveStarterKit() {
+        this.starterKitGiven = true;
+
+        const L = layout(this);
+        const kit = this.player.starterKit;
+        if (!kit) return;
+
+        // Header
+        const title = this.add.text(L.cx, L.h * 0.24, 'STARTER KIT', {
+            fontFamily: 'Georgia, serif',
+            fontSize: `${L.font(26)}px`,
+            color: '#ffd700',
+            stroke: '#000000',
+            strokeThickness: 4,
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(300).setAlpha(0);
+
+        this.tweens.add({ targets: title, alpha: 1, duration: 400, ease: 'Sine.easeOut' });
+        this.tweens.add({
+            targets: title, alpha: 0, y: '-=18',
+            delay: 2600, duration: 500,
+            onComplete: () => title.destroy(),
+        });
+
+        // Class items, staggered in one at a time
+        kit.classItems.forEach((item, i) => {
+            const y = L.h * 0.34 + i * L.font(26);
+            const line = this.add.text(L.cx, y, item.desc, {
+                fontFamily: 'Georgia, serif',
+                fontSize: `${L.font(14)}px`,
+                color: '#f0e6d3',
+                stroke: '#000000',
+                strokeThickness: 3,
+            }).setOrigin(0.5).setScrollFactor(0).setDepth(300).setAlpha(0);
+
+            this.tweens.add({
+                targets: line,
+                alpha: 1,
+                duration: 300,
+                delay: 350 + i * 320,
+                ease: 'Sine.easeOut',
+            });
+            this.tweens.add({
+                targets: line,
+                alpha: 0,
+                delay: 2600 + i * 320,
+                duration: 400,
+                onComplete: () => line.destroy(),
+            });
+        });
+
+        // Race bonus line, after the class items
+        if (kit.raceNote) {
+            const y = L.h * 0.34 + kit.classItems.length * L.font(26) + L.font(6);
+            const line = this.add.text(L.cx, y, kit.raceNote, {
+                fontFamily: 'Georgia, serif',
+                fontSize: `${L.font(13)}px`,
+                color: '#c9a84c',
+                stroke: '#000000',
+                strokeThickness: 3,
+            }).setOrigin(0.5).setScrollFactor(0).setDepth(300).setAlpha(0);
+
+            this.tweens.add({
+                targets: line,
+                alpha: 1,
+                duration: 300,
+                delay: 350 + kit.classItems.length * 320,
+                ease: 'Sine.easeOut',
+            });
+            this.tweens.add({
+                targets: line,
+                alpha: 0,
+                delay: 2600 + kit.classItems.length * 320,
+                duration: 400,
+                onComplete: () => line.destroy(),
+            });
+        }
+    }
+
     applyPlayerCosmetics() {
         if (!this.playerSprite) return;
         const aura = COSMETIC_AURAS[this.player.cosmetics?.aura || 'none'];
@@ -586,6 +828,19 @@ export class WorldScene extends Phaser.Scene {
 
         // Update buffs
         this.player.updateBuffs();
+
+        // Scroll the ground with the camera. The ground is viewport-sized and
+        // fixed to the screen, so it has to be told where the camera is looking
+        // or it would stay put while the world moved underneath it.
+        const cam = this.cameras.main;
+        if (this.ground) {
+            this.ground.tilePositionX = cam.scrollX;
+            this.ground.tilePositionY = cam.scrollY;
+        }
+        if (this.groundOverlay) {
+            this.groundOverlay.tilePositionX = cam.scrollX;
+            this.ground.tilePositionY = cam.scrollY;
+        }
     }
 
     updatePlayerMovement(delta) {
@@ -618,12 +873,22 @@ export class WorldScene extends Phaser.Scene {
         if (dx > 0) this.playerSprite.setFlipX(false);
 
         // Update player position
+        const prevX = this.player.x;
+        const prevY = this.player.y;
         this.player.x = Math.floor(this.playerSprite.x / GAME_CONFIG.TILE_SIZE);
         this.player.y = Math.floor(this.playerSprite.y / GAME_CONFIG.TILE_SIZE);
 
-        // Play step sound
+        // Count tiles walked for the travel achievements. Only when the tile
+        // actually changes, so standing still against a wall does not farm it.
+        if (this.player.x !== prevX || this.player.y !== prevY) {
+            this.player.stats.tilesWalked = (this.player.stats.tilesWalked || 0) + 1;
+            this.achievements.check();
+        }
+
+        // Play step sound + dust
         if ((dx !== 0 || dy !== 0) && Math.random() < 0.02) {
             this.audio.play('step');
+            this.spawnFootstepParticles();
         }
     }
 

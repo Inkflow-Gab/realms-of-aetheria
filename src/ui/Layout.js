@@ -24,7 +24,9 @@ export function layout(scene) {
         scale,
         ui,
         pad: Math.max(10, Math.round(14 * ui)),
-        font: (base) => Math.max(10, Math.round(base * ui)),
+        // 13px floor: below this, Georgia serif becomes illegible on a phone
+        // held at arm's length, which is how these screens get played.
+        font: (base) => Math.max(13, Math.round(base * ui)),
         x: (pct) => w * pct,
         y: (pct) => h * pct,
         /** Keep a point inside the screen with a margin. */
@@ -33,6 +35,27 @@ export function layout(scene) {
         bottom: (offset = 40) => h - offset,
         right: (offset = 40) => w - offset,
     };
+}
+
+/**
+ * Readable text: dark plate behind the glyphs so they stay legible over any
+ * backdrop, with a hard minimum size.
+ *
+ * Text drawn directly over the world or a zone backdrop is unreadable whenever
+ * the background happens to be a similar colour. A translucent dark plate
+ * behind it costs nothing and removes the problem everywhere at once.
+ */
+export function readableText(scene, x, y, content, { size = 15, color = '#f0e6d3', depth = 100 } = {}) {
+    const L = layout(scene);
+    return scene.add.text(x, y, content, {
+        fontFamily: 'Georgia, serif',
+        fontSize: `${L.font(size)}px`,
+        color,
+        stroke: '#000000',
+        strokeThickness: 3,
+        backgroundColor: 'rgba(10, 10, 26, 0.72)',
+        padding: { x: 8, y: 5 },
+    }).setScrollFactor(0).setDepth(depth);
 }
 
 /**

@@ -25,8 +25,13 @@ export class PlayerSystem {
 
         this.level = 1;
         this.exp = 0;
-        this.gold = 100;
+        this.gold = 150;
         this.skillPoints = 0;
+
+        // Running stats the achievements test against.
+        this.stats = { tilesWalked: 0, zonesVisited: ['town'] };
+        // Achievement ids already unlocked. Persisted with the save.
+        this.achievements = [];
 
         // Base stats from race
         const base = this.race.baseStats;
@@ -85,13 +90,100 @@ export class PlayerSystem {
         this.killCount = 0;
         this.deathCount = 0;
 
-        // Starting items
-        this.addItem('rusty_sword', 1);
-        this.addItem('minor_health_potion', 3);
-        this.addItem('bread', 2);
-        this.equip('rusty_sword');
-
+        this.applyStarterKit(raceId, classId);
         this.recalcStats();
+    }
+
+    /**
+     * The starter kit, chosen by class and race.
+     *
+     * A single fixed kit meant a mage began with a sword he could not use and
+     * a warrior began with no weapon at all. Each class now starts with the
+     * gear its level-1 skills actually need, and each race adds a small
+     * flavour bonus on top.
+     */
+    applyStarterKit(raceId, classId) {
+        const race = (raceId || '').toLowerCase();
+        const cls = (classId || '').toLowerCase();
+
+        // --- Class kit: weapon + armour the class can actually use ---
+        const classKits = {
+            warrior: [
+                ['rusty_sword', 'A worn but serviceable blade'],
+                ['leather_armor', 'Better than nothing'],
+                ['minor_health_potion', 'Restores 40 HP'],
+                ['bread', 'A small meal'],
+            ],
+            mage: [
+                ['apprentice_wand', 'Hums with faint aether'],
+                ['cloth_robe', 'Woven for study, not battle'],
+                ['minor_mana_potion', 'Restores 25 MP'],
+                ['bread', 'A small meal'],
+            ],
+            archer: [
+                ['hunters_bow', 'Reliable at short range'],
+                ['leather_armor', 'Better than nothing'],
+                ['minor_health_potion', 'Restores 40 HP'],
+                ['bread', 'A small meal'],
+            ],
+            paladin: [
+                ['war_mace', 'Heavy, slow, and certain'],
+                ['chainmail', 'Turns aside most blows'],
+                ['minor_health_potion', 'Restores 40 HP'],
+                ['bread', 'A small meal'],
+            ],
+            rogue: [
+                ['shadow_dagger', 'Quiet and quick'],
+                ['leather_armor', 'Better than nothing'],
+                ['minor_health_potion', 'Restores 40 HP'],
+                ['antidote', 'For when things go wrong'],
+            ],
+            necromancer: [
+                ['oak_staff', 'It remembers the tree it was'],
+                ['cloth_robe', 'Woven for study, not battle'],
+                ['minor_mana_potion', 'Restores 25 MP'],
+                ['bread', 'A small meal'],
+            ],
+        };
+
+        const kit = classKits[cls] || classKits.warrior;
+
+        for (const [itemId] of kit) {
+            this.addItem(itemId, 1);
+        }
+
+        // Equip the first weapon and the first armour in the kit.
+        const weapon = kit.find(([id]) => {
+            const it = ITEMS[id];
+            return it && it.slot !== 'ring' && it.slot !== 'neck' && it.slot !== 'waist'
+                && it.slot !== 'back' && it.slot !== 'head' && it.slot !== 'feet'
+                && it.slot !== 'hands' && it.slot !== 'offhand' && it.slot !== 'legs';
+        });
+        const armor = kit.find(([id]) => ITEMS[id]?.slot === 'chest');
+
+        if (weapon) this.equip(weapon[0]);
+        if (armor) this.equip(armor[0]);
+
+        // --- Race bonus: a small flavour perk on top of the class kit ---
+        const raceBonuses = {
+            human: { gold: 50, note: 'Human adaptability: +50 gold' },
+            elf: { item: 'minor_mana_potion', note: 'Elven attunement: +1 Minor Mana Potion' },
+            dwarf: { item: 'minor_health_potion', note: 'Dwarven toughness: +1 Health Potion' },
+            orc: { gold: 25, item: 'minor_health_potion', note: 'Orcish endurance: +25 gold, +1 Health Potion' },
+            undead: { item: 'antidote', note: 'Undying resilience: +1 Antidote' },
+            angel: { gold: 25, item: 'bread', note: 'Angelic blessing: +25 gold, +1 Bread' },
+        };
+
+        const bonus = raceBonuses[race] || { gold: 0, note: '' };
+        if (bonus.gold) this.gold += bonus.gold;
+        if (bonus.item) this.addItem(bonus.item, 1);
+
+        // Remember what was given so the world scene can show it.
+        this.starterKit = {
+            classItems: kit.map(([id, desc]) => ({ id, desc })),
+            raceNote: bonus.note,
+            raceGold: bonus.gold || 0,
+        };
     }
 
     recalcStats() {
@@ -370,6 +462,9 @@ export class PlayerSystem {
             playTime: this.playTime,
             killCount: this.killCount,
             deathCount: this.deathCount,
+            achievements: this.achievements || [],
+            stats: this.stats || { tilesWalked: 0, zonesVisited: ['town'] },
+            starterKit: this.starterKit || null,
         };
     }
 
@@ -407,6 +502,9 @@ export class PlayerSystem {
         this.deathCount = data.deathCount || 0;
         this.buffs = [];
         this.statusEffects = {};
+        this.achievements = data.achievements || [];
+        this.stats = { tilesWalked: 0, zonesVisited: ['town'], ...(data.stats || {}) };
+        this.starterKit = data.starterKit || null;
         this.recalcStats();
     }
 }

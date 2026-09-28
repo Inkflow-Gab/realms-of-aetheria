@@ -9,6 +9,7 @@ import { UIComponents } from '../ui/UIComponents.js';
 import { layout, addBetaBadge } from '../ui/Layout.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { AudioSystem } from '../systems/AudioSystem.js';
+import { AchievementSystem } from '../systems/AchievementSystem.js';
 import { EffectsSystem } from '../systems/EffectsSystem.js';
 import { QuestSystem } from '../systems/QuestSystem.js';
 
@@ -31,7 +32,9 @@ export class BattleScene extends Phaser.Scene {
 
         this.audio = new AudioSystem();
         this.audio.init(this);
-        this.questSystem = new QuestSystem(this.player);
+        this.questSystem = new QuestSystem(this.player, this);
+        this.achievements = new AchievementSystem(this.player);
+        this.achievements.init(this);
         EffectsSystem.ensureAnims(this);
         addBetaBadge(this, 'top-right');
 
@@ -369,6 +372,9 @@ export class BattleScene extends Phaser.Scene {
 
         this.audio.play('victory');
         this.audio.play('fanfare');
+
+        // Check kill-count and loot achievements now that the numbers moved.
+        this.achievements?.check();
 
         if (leveled) {
             this.time.delayedCall(500, () => {
