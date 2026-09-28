@@ -21,24 +21,27 @@ export class MainMenuScene extends Phaser.Scene {
         const L = layout(this);
         window.hideLoading?.();
         this.cameras.main.setBackgroundColor('#0a0a1a');
+        this.cameras.main.setAlpha(1);
+        this.cameras.main.setZoom(1);
 
-        // Full-bleed backdrop with a slow breathing pan — same art as boot.
+        // Full-bleed backdrop. Never tween scaleX/Y after setDisplaySize —
+        // Phaser treats those as absolute texture scales and the art collapses
+        // to a tiny postage stamp (the "menu zooms out forever" bug).
         let bg = null;
         if (this.textures.exists('bg_1')) {
             bg = this.add.image(L.cx, L.cy, 'bg_1')
-                .setDisplaySize(L.w * 1.1, L.h * 1.1)
+                .setDisplaySize(L.w * 1.08, L.h * 1.08)
                 .setAlpha(0);
             this.tweens.add({
                 targets: bg,
                 alpha: 0.92,
-                duration: 1000,
+                duration: 900,
                 ease: 'Sine.easeOut',
             });
             this.tweens.add({
                 targets: bg,
-                scaleX: 1.05,
-                scaleY: 1.05,
-                duration: 12000,
+                x: L.cx + 10,
+                duration: 14000,
                 yoyo: true,
                 repeat: -1,
                 ease: 'Sine.easeInOut',
@@ -77,13 +80,12 @@ export class MainMenuScene extends Phaser.Scene {
             ease: 'Sine.easeInOut',
         });
 
-        // Soft gold glow under the title
+        // Soft gold glow under the title (alpha only — no scale)
         const glow = this.add.ellipse(L.cx, title.y + titleSize * 0.35, L.w * 0.55, titleSize * 0.9, 0xc9a84c, 0.12)
             .setDepth(9);
         this.tweens.add({
             targets: glow,
-            alpha: { from: 0.08, to: 0.2 },
-            scaleX: { from: 0.95, to: 1.08 },
+            alpha: { from: 0.08, to: 0.22 },
             duration: 2800,
             yoyo: true,
             repeat: -1,

@@ -51,16 +51,18 @@ export class WorldLoadScene extends Phaser.Scene {
     create() {
         const L = layout(this);
         this.cameras.main.setBackgroundColor('#0a0a1a');
+        this.cameras.main.setAlpha(1);
+        this.cameras.main.setZoom(1);
 
         // Backdrop — same art language as the HTML boot loader.
+        // Do NOT tween scale after setDisplaySize (collapses to tiny art).
         if (this.textures.exists('bg_1')) {
-            this.add.image(L.cx, L.cy, 'bg_1')
-                .setDisplaySize(L.w * 1.08, L.h * 1.08)
+            const bg = this.add.image(L.cx, L.cy, 'bg_1')
+                .setDisplaySize(L.w * 1.06, L.h * 1.06)
                 .setAlpha(0.55);
             this.tweens.add({
-                targets: this.children.list[0],
-                scaleX: 1.06,
-                scaleY: 1.06,
+                targets: bg,
+                x: L.cx + 8,
                 duration: 10000,
                 yoyo: true,
                 repeat: -1,
@@ -284,9 +286,7 @@ export class WorldLoadScene extends Phaser.Scene {
     enterWorld() {
         if (this._done) return;
         this._done = true;
-        this.cameras.main.fadeOut(350, 10, 10, 26);
-        this.time.delayedCall(360, () => {
-            this.scene.start('World', this.payload);
-        });
+        // No fadeOut here — it can leave the next scene on a black camera.
+        this.scene.start('World', this.payload);
     }
 }

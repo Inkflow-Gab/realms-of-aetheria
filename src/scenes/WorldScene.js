@@ -9,7 +9,7 @@ import { QuestSystem } from '../systems/QuestSystem.js';
 import { AudioSystem } from '../systems/AudioSystem.js';
 import { VirtualJoystick } from '../ui/VirtualJoystick.js';
 import { UIComponents } from '../ui/UIComponents.js';
-import { layout, addBetaBadge } from '../ui/Layout.js';
+import { layout, addBetaBadge, readableText, HUD_TEXT } from '../ui/Layout.js';
 import { SettingsSystem } from '../systems/SettingsSystem.js';
 import { AchievementSystem } from '../systems/AchievementSystem.js';
 import { COSMETIC_AURAS, formatDisplayName } from '../data/Cosmetics.js';
@@ -36,9 +36,35 @@ export class WorldScene extends Phaser.Scene {
     }
 
     create() {
-        const width = this.cameras.main.width;
-        const height = this.cameras.main.height;
+        // Guarantee a visible camera (WorldLoad used to fadeOut and leave black).
+        try {
+            this.cameras.main.setAlpha(1);
+            this.cameras.main.setZoom(1);
+            this.cameras.main.fadeIn(350, 10, 10, 26);
+        } catch { /* ignore */ }
 
+        const width = this.cameras.main.width || this.scale.width || 1280;
+        const height = this.cameras.main.height || this.scale.height || 720;
+
+        try {
+            this._bootWorld(width, height);
+        } catch (err) {
+            console.error('[World] create failed:', err);
+            this.add.rectangle(width / 2, height / 2, width, height, 0x0a0a1a, 1);
+            this.add.text(width / 2, height / 2 - 20, 'World failed to load', {
+                fontFamily: 'Georgia, serif', fontSize: '22px', color: '#e74c3c',
+            }).setOrigin(0.5);
+            this.add.text(width / 2, height / 2 + 20, String(err?.message || err).slice(0, 120), {
+                fontFamily: 'Georgia, serif', fontSize: '12px', color: '#f0e6d3',
+                wordWrap: { width: width * 0.8 },
+            }).setOrigin(0.5);
+            UIComponents.createButton(this, width / 2, height / 2 + 70, 'Back to Menu', () => {
+                this.scene.start('MainMenu');
+            }, { width: 200, height: 44, fontSize: 16, variant: 'primary' });
+        }
+    }
+
+    _bootWorld(width, height) {
         // === LOAD OR CREATE PLAYER ===
         if (this.loadSave) {
             const saveSystem = new SaveSystem();
@@ -66,7 +92,6 @@ export class WorldScene extends Phaser.Scene {
         this.npcs = [];
         this.droppedItems = [];
 
-        // Create tilemap background
         this.createWorld();
 
         // === PLAYER SPRITE ===
@@ -75,96 +100,87 @@ export class WorldScene extends Phaser.Scene {
         const safeChar = this.textures.exists(charKey)
             ? charKey
             : (this.textures.exists('char_0') ? 'char_0' : null);
+        const spawnX = (this.player.x || 5) * GAME_CONFIG.TILE_SIZE;
+        const spawnY = (this.player.y || 5) * GAME_CONFIG.TILE_SIZE;
         if (safeChar) {
-            this.playerSprite = this.add.sprite(
-                this.player.x * GAME_CONFIG.TILE_SIZE,
-                this.player.y * GAME_CONFIG.TILE_SIZE,
-                safeChar
-            ).setScale(gfx.playerScale || 1.5).setDepth(10);
+            this.playerSprite = this.add.sprite(spawnX, spawnY, safeChar)
+                .setScale(Math.max(1.8, gfx.playerScale || 2.0))
+                .setDepth(10);
         } else {
-            this.playerSprite = this.add.circle(
-                this.player.x * GAME_CONFIG.TILE_SIZE,
-                this.player.y * GAME_CONFIG.TILE_SIZE,
-                14,
-                0xc9a84c
-            ).setDepth(10);
+            this.playerSprite = this.add.circle(spawnX, spawnY, 18, 0xc9a84c).setDepth(10);
             this.playerSprite.setFlipX = () => {};
         }
 
-        // === CAMERA (zoom stays 1 — zoomed cameras break fixed HUD taps) ===
-        this.cameras.main.startFollow(this.playerSprite, true, 0.1, 0.1);
+        // Camera locked on the hero — snap first, then smooth follow.
+        const mapW = GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE;
+        const mapH = GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE;
+        this.cameras.main.setBounds(0, 0, mapW, mapH);
         this.cameras.main.setZoom(1);
+        this.cameras.main.setRoundPixels(true);
+        this.cameras.main.centerOn(spawnX, spawnY);
+        this.cameras.main.startFollow(this.playerSprite, true, 0.18, 0.18);
+        this.cameras.main.setDeadzone(0, 0);
         this.applyPlayerCosmetics();
 
-        // === UI SETUP (after camera so scrollFactor 0 binds correctly) ===
         this.createUI();
 
-        // === MOBILE CONTROLS ===
-        const joyR = Math.max(48, Math.min(64, this.cameras.main.height * 0.12));
+        const joyR = Math.max(48, Math.min(64, height * 0.12));
         this.joystick = new VirtualJoystick(
             this,
             Math.max(80, joyR + 28),
-            this.cameras.main.height - joyR - 20,
+            height - joyR - 20,
             joyR * 1.5
         );
 
         this.createActionButtons();
-
-        // === SPAWN ENTITIES ===
         this.spawnNPCs();
         this.spawnMonsters();
 
-        // === KEYBOARD INPUT ===
-        this.cursors = this.input.keyboard.createCursorKeys();
-        this.keys = this.input.keyboard.addKeys('W,A,S,D,I,K,L,P,SPACE,E');
+        // Keyboard is often null on Android WebView — never crash the world for it.
+        try {
+            if (this.input.keyboard) {
+                this.cursors = this.input.keyboard.createCursorKeys();
+                this.keys = this.input.keyboard.addKeys('W,A,S,D,I,K,L,P,SPACE,E');
+            } else {
+                this.cursors = { left: {}, right: {}, up: {}, down: {} };
+                this.keys = {};
+            }
+        } catch {
+            this.cursors = { left: {}, right: {}, up: {}, down: {} };
+            this.keys = {};
+        }
 
-        // === DIALOGUE ===
-        this.dialogueBox = new DialogueBox(this, width / 2 - 300, height - 200, 600, 150);
+        this.dialogueBox = new DialogueBox(this, width / 2 - Math.min(300, width * 0.4), height - 200, Math.min(600, width * 0.8), 150);
         this.dialogueBox.onClose = () => {
             this.isInDialogue = false;
         };
 
-        // === PLAY MUSIC ===
-        this.audio.playMusic(this.currentZone === 'town' ? 'town' : 'battle');
+        try {
+            this.audio.playMusic(this.currentZone === 'town' ? 'town' : 'battle');
+        } catch { /* ignore */ }
 
-        // === LOADING TRANSITION ===
-        // Fade in from black so entering the world reads as a transition
-        // rather than a hard cut, and so a slow first frame is never visible.
-        this.cameras.main.fadeIn(450, 10, 10, 26);
-
-        // Zone banner: names where the player has arrived.
         this.showZoneBanner();
 
-        // === TAP PARTICLES ===
-        // A small burst wherever the player taps, so touches feel responsive
-        // even when they are not on a button.
         this.input.on('pointerdown', (pointer) => this.spawnTapParticles(pointer));
 
-        // === STARTER KIT ===
-        // Only on a brand-new hero, and only once.
         if (!this.loadSave && !this.starterKitGiven) {
             this.giveStarterKit();
         }
 
-        // === AUTO-SAVE ===
         this.time.addEvent({
             delay: 30000,
             callback: () => this.saveGame(),
             loop: true,
         });
 
-        // Zone transition check
         this.time.addEvent({
             delay: 1000,
             callback: () => this.checkZoneTransition(),
             loop: true,
         });
 
-        // Treasure chests scattered in the current zone
         this.chests = [];
         this.spawnWorldChests();
-
-        // Battle resume → remove corpse, spill loot bags into the world
         this.events.on('resume', (_sys, data) => this.onBattleResume(data));
     }
 
@@ -215,7 +231,11 @@ export class WorldScene extends Phaser.Scene {
             this.add.image(L.cx, L.cy, bgKey)
                 .setDisplaySize(L.w, L.h)
                 .setScrollFactor(0)
-                .setDepth(0);
+                .setDepth(0)
+                .setAlpha(0.95);
+        } else {
+            // Bright fallback so the world never boots into a black void.
+            this.add.rectangle(L.cx, L.cy, L.w, L.h, 0x3a5a3a, 1).setScrollFactor(0).setDepth(0);
         }
 
         // Ground tiles
@@ -259,7 +279,7 @@ export class WorldScene extends Phaser.Scene {
                 .setOrigin(0, 0)
                 .setScrollFactor(0)
                 .setDepth(1)
-                .setAlpha(0.82);
+                .setAlpha(0.55);
         } else {
             this.ground = this.add.rectangle(0, 0, w, h, 0x2a4a2a, 0.85)
                 .setOrigin(0, 0)
@@ -271,10 +291,10 @@ export class WorldScene extends Phaser.Scene {
         }
 
         const zoneTint = {
-            cave: 0x8a8a9a,
-            dungeon: 0x6a6a7a,
-            abyss: 0x4a4a5a,
-            mountain: 0x9a9aaa,
+            cave: 0xb0b0c0,
+            dungeon: 0x9a9aaa,
+            abyss: 0x8a8a9a,
+            mountain: 0xc0c0d0,
         };
         if (grassKey && zoneTint[this.currentZone] && this.ground.setTint) {
             this.ground.setTint(zoneTint[this.currentZone]);
@@ -333,45 +353,32 @@ export class WorldScene extends Phaser.Scene {
 
         addBetaBadge(this, 'top-left');
 
-        // === TOP-LEFT: Player Info (below beta badge) ===
         this.uiContainer = this.add.container(0, 0).setScrollFactor(0).setDepth(100);
 
         const infoTop = L.pad + L.font(28);
-        this.nameText = this.add.text(L.pad, infoTop, `${this.player.name} Lv.${this.player.level}`, {
-            fontFamily: 'Georgia, serif',
-            fontSize: `${L.font(15)}px`,
-            color: '#c9a84c',
-            stroke: '#000',
-            strokeThickness: 2,
-        }).setScrollFactor(0).setDepth(100);
+        this.nameText = readableText(this, L.pad, infoTop, `${this.player.name} Lv.${this.player.level}`, {
+            size: 16, color: HUD_TEXT.gold, depth: 110,
+        });
 
         const barW = Math.min(200, width * 0.28);
-        this.hpBar = UIComponents.createBar(this, L.pad, infoTop + L.font(24), barW, 16, this.player.hp, this.player.maxHp, GAME_CONFIG.COLORS.HP);
-        this.hpBar.setScrollFactor(0).setDepth(100);
+        this.hpBar = UIComponents.createBar(this, L.pad, infoTop + L.font(28), barW, 18, this.player.hp, this.player.maxHp, GAME_CONFIG.COLORS.HP);
+        this.hpBar.setScrollFactor(0).setDepth(110);
 
-        this.mpBar = UIComponents.createBar(this, L.pad, infoTop + L.font(44), barW, 12, this.player.mp, this.player.maxMp, GAME_CONFIG.COLORS.MP);
-        this.mpBar.setScrollFactor(0).setDepth(100);
+        this.mpBar = UIComponents.createBar(this, L.pad, infoTop + L.font(50), barW, 14, this.player.mp, this.player.maxMp, GAME_CONFIG.COLORS.MP);
+        this.mpBar.setScrollFactor(0).setDepth(110);
 
-        this.xpBar = UIComponents.createBar(this, L.pad, infoTop + L.font(60), barW, 9, this.player.exp, this.player.expToNext || 100, GAME_CONFIG.COLORS.XP);
-        this.xpBar.setScrollFactor(0).setDepth(100);
+        this.xpBar = UIComponents.createBar(this, L.pad, infoTop + L.font(68), barW, 10, this.player.exp, this.player.expToNext || 100, GAME_CONFIG.COLORS.XP);
+        this.xpBar.setScrollFactor(0).setDepth(110);
 
-        this.goldText = this.add.text(L.pad, infoTop + L.font(74), `Gold: ${this.player.gold}`, {
-            fontFamily: 'Georgia, serif',
-            fontSize: `${L.font(13)}px`,
-            color: '#ffd700',
-            stroke: '#000',
-            strokeThickness: 2,
-        }).setScrollFactor(0).setDepth(100);
+        this.goldText = readableText(this, L.pad, infoTop + L.font(84), `Gold: ${this.player.gold}`, {
+            size: 14, color: HUD_TEXT.accent, depth: 110,
+        });
 
-        this.zoneText = this.add.text(width / 2, L.pad, this.getZoneName(), {
-            fontFamily: 'Georgia, serif',
-            fontSize: `${L.font(16)}px`,
-            color: '#c9a84c',
-            stroke: '#000',
-            strokeThickness: 2,
-        }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(100);
+        this.zoneText = readableText(this, width / 2, L.pad, this.getZoneName(), {
+            size: 16, color: HUD_TEXT.gold, depth: 110, originX: 0.5, originY: 0,
+        });
 
-        // === TOP-RIGHT: Menu Buttons (packed so they never spill left) ===
+        // === TOP-RIGHT: Menu Buttons ===
         const btnData = [
             { label: 'Map', scene: 'Map' },
             { label: 'Items', scene: 'Inventory' },
@@ -381,7 +388,7 @@ export class WorldScene extends Phaser.Scene {
             { label: 'Save', action: 'save' },
         ];
         const topBtnW = Math.max(52, Math.min(72, (width * 0.48) / btnData.length - 5));
-        const topBtnH = Math.max(30, L.font(32));
+        const topBtnH = Math.max(32, L.font(34));
         btnData.forEach((btn, i) => {
             const x = width - L.pad - topBtnW / 2 - i * (topBtnW + 5);
             const button = UIComponents.createButton(this, x, L.pad + topBtnH / 2, btn.label, () => {
@@ -397,7 +404,7 @@ export class WorldScene extends Phaser.Scene {
             }, {
                 width: topBtnW,
                 height: topBtnH,
-                fontSize: L.font(11),
+                fontSize: L.font(12),
                 variant: btn.action === 'save' ? 'primary' : (btn.label === 'Map' ? 'primary' : 'ghost'),
                 bgColor: btn.action === 'save' ? 0x2a3a4a : (btn.label === 'Map' ? 0x1a3a2a : undefined),
                 depth: 300,
@@ -405,21 +412,19 @@ export class WorldScene extends Phaser.Scene {
             button.pinToHud();
         });
 
-        // Quest compass HUD
-        this.questHud = this.add.text(L.pad, L.h - L.pad - L.font(28), '', {
-            fontFamily: 'Georgia, serif',
-            fontSize: `${L.font(12)}px`,
-            color: '#ffd700',
-            stroke: '#000',
-            strokeThickness: 3,
-            wordWrap: { width: width * 0.42 },
-        }).setScrollFactor(0).setDepth(120).setOrigin(0, 1);
+        this.questHud = readableText(this, L.pad, L.h - L.pad - L.font(8), '', {
+            size: 13,
+            color: HUD_TEXT.accent,
+            depth: 120,
+            originX: 0,
+            originY: 1,
+            wrap: width * 0.42,
+        });
         this.refreshQuestHud();
 
         this.stepsSinceEncounter = 0;
         this._encounterLock = false;
 
-        // === BOTTOM-RIGHT: Action Buttons ===
         const atk = Math.max(58, L.font(64));
         this.attackBtn = UIComponents.createButton(this, width - L.pad - atk / 2, height - L.pad - atk / 2, 'ATK', () => {
             this.playerAttack();
@@ -436,20 +441,18 @@ export class WorldScene extends Phaser.Scene {
         }, { width: Math.max(56, L.font(60)), height: Math.max(42, L.font(44)), fontSize: L.font(13), bgColor: 0x2a4a2a, variant: 'primary', depth: 300 });
         this.interactBtn.pinToHud();
 
-        // === MINIMAP ===
         const mmW = Math.min(140, width * 0.18);
         const mmH = Math.min(100, height * 0.22);
         const mmX = width - L.pad - mmW;
         const mmY = L.pad + topBtnH + 10;
         this.minimap = this.add.graphics().setScrollFactor(0).setDepth(100);
-        this.minimap.fillStyle(0x1a1a2e, 0.7);
+        this.minimap.fillStyle(0x121228, 0.85);
         this.minimap.fillRoundedRect(mmX, mmY, mmW, mmH, 8);
-        this.minimap.lineStyle(1, 0xc9a84c, 0.5);
+        this.minimap.lineStyle(2, 0xffd700, 0.7);
         this.minimap.strokeRoundedRect(mmX, mmY, mmW, mmH, 8);
 
-        this.minimapDot = this.add.circle(mmX + mmW / 2, mmY + mmH / 2, 4, 0xc9a84c).setScrollFactor(0).setDepth(101);
+        this.minimapDot = this.add.circle(mmX + mmW / 2, mmY + mmH / 2, 4, 0xffd700).setScrollFactor(0).setDepth(101);
 
-        // Tap minimap to open full map
         const mmHit = this.add.zone(mmX + mmW / 2, mmY + mmH / 2, mmW, mmH)
             .setScrollFactor(0)
             .setDepth(102)
@@ -820,10 +823,12 @@ export class WorldScene extends Phaser.Scene {
         const notif = this.add.text(width / 2, 100, text, {
             fontFamily: 'Georgia, serif',
             fontSize: '18px',
-            color: '#c9a84c',
-            backgroundColor: '#1a1a2e',
-            padding: { x: 15, y: 8 },
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(200);
+            color: HUD_TEXT.accent,
+            stroke: '#000000',
+            strokeThickness: 5,
+            backgroundColor: HUD_TEXT.plate,
+            padding: { x: 16, y: 10 },
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(250);
 
         this.tweens.add({
             targets: notif,
@@ -847,17 +852,21 @@ export class WorldScene extends Phaser.Scene {
         const banner = this.add.text(L.cx, L.h * 0.32, name, {
             fontFamily: 'Georgia, serif',
             fontSize: `${L.font(34)}px`,
-            color: '#f0e6d3',
+            color: '#fff8e7',
             stroke: '#000000',
-            strokeThickness: 5,
+            strokeThickness: 6,
+            backgroundColor: 'rgba(8, 8, 20, 0.9)',
+            padding: { x: 18, y: 10 },
         }).setOrigin(0.5).setScrollFactor(0).setDepth(300).setAlpha(0);
 
-        const sub = this.add.text(L.cx, L.h * 0.32 + L.font(30), 'Realms of Aetheria', {
+        const sub = this.add.text(L.cx, L.h * 0.32 + L.font(36), 'Realms of Aetheria', {
             fontFamily: 'Georgia, serif',
             fontSize: `${L.font(14)}px`,
-            color: '#c9a84c',
+            color: '#ffe566',
             stroke: '#000000',
-            strokeThickness: 3,
+            strokeThickness: 4,
+            backgroundColor: 'rgba(8, 8, 20, 0.85)',
+            padding: { x: 12, y: 6 },
         }).setOrigin(0.5).setScrollFactor(0).setDepth(300).setAlpha(0);
 
         this.tweens.add({
@@ -1042,25 +1051,14 @@ export class WorldScene extends Phaser.Scene {
 
     update(time, delta) {
         if (this.isInDialogue) return;
+        if (!this.player || !this.playerSprite) return;
 
-        // Update player movement
         this.updatePlayerMovement(delta);
-
-        // Update UI
         this.updateUI();
-
-        // Update monsters
         this.updateMonsters(delta);
-
-        // Update buffs
-        this.player.updateBuffs();
-
-        // Auto-pickup nearby loot bags
+        try { this.player.updateBuffs(); } catch { /* ignore */ }
         this.tryPickupLoot();
 
-        // Scroll the ground with the camera. The ground is viewport-sized and
-        // fixed to the screen, so it has to be told where the camera is looking
-        // or it would stay put while the world moved underneath it.
         const cam = this.cameras.main;
         if (this.ground && this.ground.tilePositionX !== undefined && typeof this.ground.setTexture === 'function') {
             this.ground.tilePositionX = cam.scrollX;
@@ -1082,10 +1080,11 @@ export class WorldScene extends Phaser.Scene {
         dy = joyDir.y;
 
         // Keyboard input
-        if (this.cursors.left.isDown || this.keys.A.isDown) dx = -1;
-        if (this.cursors.right.isDown || this.keys.D.isDown) dx = 1;
-        if (this.cursors.up.isDown || this.keys.W.isDown) dy = -1;
-        if (this.cursors.down.isDown || this.keys.S.isDown) dy = 1;
+        // Keyboard input (safe when keyboard plugin is missing on mobile)
+        if (this.cursors?.left?.isDown || this.keys?.A?.isDown) dx = -1;
+        if (this.cursors?.right?.isDown || this.keys?.D?.isDown) dx = 1;
+        if (this.cursors?.up?.isDown || this.keys?.W?.isDown) dy = -1;
+        if (this.cursors?.down?.isDown || this.keys?.S?.isDown) dy = 1;
 
         // Normalize
         if (dx !== 0 && dy !== 0) {
@@ -1124,12 +1123,25 @@ export class WorldScene extends Phaser.Scene {
     }
 
     updateUI() {
+        if (!this.hpBar || !this.player) return;
         this.hpBar.updateValue(this.player.hp, this.player.maxHp);
-        this.mpBar.updateValue(this.player.mp, this.player.maxMp);
-        this.xpBar.updateValue(this.player.exp, this.player.expToNext || 100);
-        this.goldText.setText(`Gold: ${this.player.gold}`);
-        this.nameText.setText(`${formatDisplayName(this.player)} Lv.${this.player.level}`);
+        this.mpBar?.updateValue(this.player.mp, this.player.maxMp);
+        this.xpBar?.updateValue(this.player.exp, this.player.expToNext || 100);
+        this.goldText?.setText(`Gold: ${this.player.gold}`);
+        this.nameText?.setText(`${formatDisplayName(this.player)} Lv.${this.player.level}`);
         this.refreshQuestHud?.();
+
+        // Keep zoom stable; re-center if the hero drifts wildly off-screen.
+        if (this.playerSprite && this.cameras?.main) {
+            if (this.cameras.main.zoom !== 1) this.cameras.main.setZoom(1);
+            const cam = this.cameras.main;
+            const dx = Math.abs(cam.scrollX + cam.width / 2 - this.playerSprite.x);
+            const dy = Math.abs(cam.scrollY + cam.height / 2 - this.playerSprite.y);
+            if (dx > cam.width || dy > cam.height) {
+                cam.centerOn(this.playerSprite.x, this.playerSprite.y);
+                cam.startFollow(this.playerSprite, true, 0.18, 0.18);
+            }
+        }
     }
 
     tryRandomEncounter() {

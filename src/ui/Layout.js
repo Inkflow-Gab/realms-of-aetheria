@@ -38,25 +38,46 @@ export function layout(scene) {
 }
 
 /**
- * Readable text: dark plate behind the glyphs so they stay legible over any
- * backdrop, with a hard minimum size.
- *
- * Text drawn directly over the world or a zone backdrop is unreadable whenever
- * the background happens to be a similar colour. A translucent dark plate
- * behind it costs nothing and removes the problem everywhere at once.
+ * Readable HUD / world text — bright glyphs on a solid dark plate.
+ * Use this for any label that sits over gameplay art.
  */
-export function readableText(scene, x, y, content, { size = 15, color = '#f0e6d3', depth = 100 } = {}) {
+export function readableText(scene, x, y, content, {
+    size = 15,
+    color = '#fff8e7',
+    depth = 100,
+    originX = 0,
+    originY = 0,
+    align = 'left',
+    wrap = 0,
+} = {}) {
     const L = layout(scene);
-    return scene.add.text(x, y, content, {
+    const style = {
         fontFamily: 'Georgia, serif',
         fontSize: `${L.font(size)}px`,
         color,
         stroke: '#000000',
-        strokeThickness: 3,
-        backgroundColor: 'rgba(10, 10, 26, 0.72)',
-        padding: { x: 8, y: 5 },
-    }).setScrollFactor(0).setDepth(depth);
+        strokeThickness: 5,
+        backgroundColor: 'rgba(8, 8, 20, 0.88)',
+        padding: { x: 10, y: 6 },
+        align,
+    };
+    if (wrap > 0) style.wordWrap = { width: wrap };
+    return scene.add.text(x, y, content, style)
+        .setOrigin(originX, originY)
+        .setScrollFactor(0)
+        .setDepth(depth);
 }
+
+/** Shared bright text style for scenes that build Text manually. */
+export const HUD_TEXT = {
+    color: '#fff8e7',
+    gold: '#ffe566',
+    accent: '#ffd700',
+    muted: '#e8dcc0',
+    stroke: '#000000',
+    strokeThickness: 5,
+    plate: 'rgba(8, 8, 20, 0.88)',
+};
 
 /**
  * Persistent corner badge so builds are obviously tagged as beta.

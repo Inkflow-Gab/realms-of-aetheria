@@ -28,21 +28,25 @@ export class DialogueBox {
         this.nameText = scene.add.text(20, 10, '', {
             fontFamily: 'Georgia, serif',
             fontSize: '18px',
-            color: '#c9a84c',
+            color: '#ffe566',
             fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 3,
         });
 
         this.dialogueText = scene.add.text(20, 40, '', {
             fontFamily: 'Georgia, serif',
             fontSize: '16px',
-            color: '#f0e6d3',
+            color: '#fff8e7',
+            stroke: '#000000',
+            strokeThickness: 2,
             wordWrap: { width: width - 40 },
         });
 
         this.continueText = scene.add.text(width - 30, height - 25, '▼', {
             fontFamily: 'Georgia, serif',
             fontSize: '16px',
-            color: '#c9a84c',
+            color: '#ffd700',
         }).setOrigin(0.5);
 
         scene.tweens.add({

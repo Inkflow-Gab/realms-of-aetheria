@@ -9,7 +9,7 @@ export const GAME_CONFIG = {
 
     // Shown on the main menu. Keep in sync with versionName in
     // android/app/build.gradle and package.json.
-    VERSION: '1.0.6',
+    VERSION: '1.0.7',
 
     // Physics
     GRAVITY: 800,
@@ -57,42 +57,42 @@ export const GAME_CONFIG = {
 // Character Races
 export const RACES = {
     HUMAN: {
-        id: 'human', name: 'Human', desc: 'Versatile and ambitious',
+        id: 'human', name: 'Human', desc: 'Versatile explorers who adapt to any path',
         bonuses: { str: 2, dex: 2, int: 2, vit: 2, luk: 2 },
         baseStats: { hp: 100, mp: 60, atk: 15, def: 10, spd: 12, luk: 10 },
         color: 0xf5cba7,
         sprite: 'human'
     },
     ELF: {
-        id: 'elf', name: 'Elf', desc: 'Graceful and wise',
+        id: 'elf', name: 'Elf', desc: 'Graceful forest-born — speed and spellcraft',
         bonuses: { str: 0, dex: 4, int: 4, vit: 0, luk: 2 },
         baseStats: { hp: 80, mp: 90, atk: 12, def: 8, spd: 16, luk: 14 },
         color: 0xa8e6cf,
         sprite: 'elf'
     },
     DWARF: {
-        id: 'dwarf', name: 'Dwarf', desc: 'Stout and resilient',
+        id: 'dwarf', name: 'Dwarf', desc: 'Mountain-forged — unbreakable and stubborn',
         bonuses: { str: 4, dex: 0, int: 0, vit: 4, luk: 2 },
         baseStats: { hp: 130, mp: 40, atk: 18, def: 14, spd: 8, luk: 8 },
         color: 0xd4a574,
         sprite: 'dwarf'
     },
     ORC: {
-        id: 'orc', name: 'Orc', desc: 'Powerful and fierce',
+        id: 'orc', name: 'Orc', desc: 'War-bred giants — brutal strength and fury',
         bonuses: { str: 5, dex: 1, int: 0, vit: 3, luk: 1 },
         baseStats: { hp: 140, mp: 30, atk: 22, def: 12, spd: 10, luk: 6 },
         color: 0x8bc34a,
         sprite: 'orc'
     },
     UNDEAD: {
-        id: 'undead', name: 'Undead', desc: 'Cursed but enduring',
+        id: 'undead', name: 'Undead', desc: 'Deathless wanderers — endure what others cannot',
         bonuses: { str: 3, dex: 1, int: 2, vit: 4, luk: 0 },
         baseStats: { hp: 120, mp: 50, atk: 16, def: 10, spd: 10, luk: 4 },
         color: 0xb0bec5,
         sprite: 'undead'
     },
     ANGEL: {
-        id: 'angel', name: 'Angel', desc: 'Blessed with divine power',
+        id: 'angel', name: 'Angel', desc: 'Skyborn vessels of light — divine magic flows free',
         bonuses: { str: 1, dex: 2, int: 5, vit: 2, luk: 2 },
         baseStats: { hp: 90, mp: 110, atk: 14, def: 10, spd: 12, luk: 12 },
         color: 0xfff9c4,
