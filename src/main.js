@@ -125,6 +125,11 @@ const game = new Phaser.Game({
     },
 });
 
+// Prefer the top-most interactive object under a finger (HUD over world).
+game.events.once('ready', () => {
+    try { game.input.setTopOnly(true); } catch { /* ignore */ }
+});
+
 SettingsSystem.apply(game, bootSettings);
 
 // Keep canvas locked to the visible viewport after orientation / inset changes.

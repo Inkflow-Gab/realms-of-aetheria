@@ -51,8 +51,8 @@ export class InventoryScene extends Phaser.Scene {
             const y = 120 + Math.floor(i / 6) * 90;
             const item = this.player.equipment[slot];
             const slotUI = UIComponents.createSlot(this, x, y, 70, item, 1);
-            slotUI.setInteractive({ useHandCursor: true });
-            slotUI.on('pointerdown', () => {
+            const hit = slotUI.hitZone || slotUI;
+            hit.on('pointerdown', () => {
                 if (item) {
                     this.player.unequip(slot);
                     this.scene.restart({ player: this.player });
@@ -116,13 +116,13 @@ export class InventoryScene extends Phaser.Scene {
             if (!itemData) return;
 
             const slot = UIComponents.createSlot(this, x, y, slotSize, itemData, invItem.count);
-            slot.setInteractive({ useHandCursor: true });
+            const hit = slot.hitZone || slot;
 
-            slot.on('pointerover', () => {
+            hit.on('pointerover', () => {
                 this.showItemDetails(itemData);
             });
 
-            slot.on('pointerdown', () => {
+            hit.on('pointerdown', () => {
                 this.showItemActions(itemData, invItem);
             });
 
@@ -171,12 +171,30 @@ export class InventoryScene extends Phaser.Scene {
         const width = this.cameras.main.width;
         const height = this.cameras.main.height;
 
-        // Action menu
+        if (this._actionMenu) {
+            this._actionMenu.destroy(true);
+            this._actionMenu = null;
+        }
+
+        const menu = this.add.container(0, 0).setDepth(500);
+        this._actionMenu = menu;
+
         const menuBg = this.add.graphics();
-        menuBg.fillStyle(0x1a1a2e, 0.95);
-        menuBg.fillRoundedRect(width / 2 - 100, height / 2 - 80, 200, 160, 10);
-        menuBg.lineStyle(2, 0xc9a84c, 1);
-        menuBg.strokeRoundedRect(width / 2 - 100, height / 2 - 80, 200, 160, 10);
+        menuBg.fillStyle(0x000000, 0.45);
+        menuBg.fillRect(0, 0, width, height);
+        menuBg.setInteractive(new Phaser.Geom.Rectangle(0, 0, width, height), Phaser.Geom.Rectangle.Contains);
+        menuBg.on('pointerdown', () => {
+            menu.destroy(true);
+            this._actionMenu = null;
+        });
+        menu.add(menuBg);
+
+        const panel = this.add.graphics();
+        panel.fillStyle(0x1a1a2e, 0.98);
+        panel.fillRoundedRect(width / 2 - 110, height / 2 - 90, 220, 180, 10);
+        panel.lineStyle(2, 0xc9a84c, 1);
+        panel.strokeRoundedRect(width / 2 - 110, height / 2 - 90, 220, 180, 10);
+        menu.add(panel);
 
         const actions = [];
         const cat = getItemCategory(item);
@@ -190,19 +208,19 @@ export class InventoryScene extends Phaser.Scene {
                 },
             });
         }
-        if (item.category === 'consumable') {
+        if (cat === 'consumable') {
             actions.push({ label: 'Use', callback: () => { this.player.useItem(item.id); this.scene.restart({ player: this.player }); } });
         }
         actions.push({ label: 'Drop', callback: () => { this.player.removeItem(item.id, 1); this.scene.restart({ player: this.player }); } });
         actions.push({ label: 'Cancel', callback: () => {} });
 
         actions.forEach((action, i) => {
-            const btn = UIComponents.createButton(this, width / 2, height / 2 - 50 + i * 35, action.label, action.callback, {
-                width: 150, height: 30, fontSize: 14,
-            });
-            btn.on('pointerdown', () => {
-                menuBg.destroy();
-            });
+            const btn = UIComponents.createButton(this, width / 2, height / 2 - 55 + i * 38, action.label, () => {
+                menu.destroy(true);
+                this._actionMenu = null;
+                action.callback();
+            }, { width: 160, height: 34, fontSize: 14, depth: 510 });
+            menu.add(btn);
         });
     }
 }

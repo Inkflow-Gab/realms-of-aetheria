@@ -72,11 +72,14 @@ export class SettingsSystem {
         const particles = settings.particles !== false && g !== 'low';
         return {
             quality: g,
-            cameraZoom: g === 'low' ? 1.0 : g === 'high' ? 1.32 : 1.2,
+            // Camera zoom breaks HUD hit-testing on Capacitor WebViews.
+            // Keep zoom at 1 and use a subtle world feel via other settings.
+            cameraZoom: 1,
             particles,
             screenShake: settings.screenShake !== false && g !== 'low',
             antialias: g !== 'low',
             sparkles: g === 'high',
+            playerScale: g === 'high' ? 1.65 : g === 'low' ? 1.35 : 1.5,
         };
     }
 
@@ -92,8 +95,12 @@ export class SettingsSystem {
         // Push camera zoom to an active world scene without restarting.
         const world = game?.scene?.getScene?.('World');
         if (world?.cameras?.main) {
-            const profile = SettingsSystem.getGraphicsProfile(settings);
-            world.cameras.main.setZoom(profile.cameraZoom);
+            // Keep zoom at 1 so HUD hit-testing stays aligned.
+            world.cameras.main.setZoom(1);
+            if (world.playerSprite) {
+                const profile = SettingsSystem.getGraphicsProfile(settings);
+                world.playerSprite.setScale(profile.playerScale || 1.5);
+            }
         }
     }
 

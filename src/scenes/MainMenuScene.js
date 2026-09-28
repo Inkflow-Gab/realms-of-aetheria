@@ -154,16 +154,14 @@ export class MainMenuScene extends Phaser.Scene {
     }
 
     fadeInMenuButtons(buttons) {
+        // Keep buttons fully interactive immediately -- only fade the look.
         buttons.forEach((button, i) => {
-            const targetY = button.y;
-            button.setAlpha(0);
-            button.y = targetY + 18;
+            button.setAlpha(0.35);
             this.tweens.add({
                 targets: button,
                 alpha: 1,
-                y: targetY,
-                duration: 420,
-                delay: 120 * i,
+                duration: 280,
+                delay: 80 * i,
                 ease: 'Cubic.easeOut',
             });
         });

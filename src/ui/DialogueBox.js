@@ -11,36 +11,35 @@ export class DialogueBox {
         this.height = height;
         this.visible = false;
         this.onClose = null;
+        this._typing = null;
 
-        this.container = scene.add.container(0, 0);
+        // Container is positioned at the box origin so the hit area matches.
+        this.container = scene.add.container(x, y);
         this.container.setVisible(false);
         this.container.setDepth(1000);
+        this.container.setScrollFactor(0);
 
-        // Background
         this.bg = scene.add.graphics();
         this.bg.fillStyle(0x1a1a2e, 0.95);
-        this.bg.fillRoundedRect(x, y, width, height, 12);
+        this.bg.fillRoundedRect(0, 0, width, height, 12);
         this.bg.lineStyle(2, 0xc9a84c, 1);
-        this.bg.strokeRoundedRect(x, y, width, height, 12);
+        this.bg.strokeRoundedRect(0, 0, width, height, 12);
 
-        // Speaker name
-        this.nameText = scene.add.text(x + 20, y + 10, '', {
+        this.nameText = scene.add.text(20, 10, '', {
             fontFamily: 'Georgia, serif',
             fontSize: '18px',
             color: '#c9a84c',
             fontStyle: 'bold',
         });
 
-        // Dialogue text
-        this.dialogueText = scene.add.text(x + 20, y + 40, '', {
+        this.dialogueText = scene.add.text(20, 40, '', {
             fontFamily: 'Georgia, serif',
             fontSize: '16px',
             color: '#f0e6d3',
             wordWrap: { width: width - 40 },
         });
 
-        // Continue indicator
-        this.continueText = scene.add.text(x + width - 30, y + height - 25, '▼', {
+        this.continueText = scene.add.text(width - 30, height - 25, '▼', {
             fontFamily: 'Georgia, serif',
             fontSize: '16px',
             color: '#c9a84c',
@@ -54,43 +53,50 @@ export class DialogueBox {
             repeat: -1,
         });
 
-        // Click to continue
-        this.container.add([this.bg, this.nameText, this.dialogueText, this.continueText]);
-        this.container.setSize(width, height);
-        this.container.setInteractive();
+        this.hit = scene.add.zone(width / 2, height / 2, width, height)
+            .setInteractive({ useHandCursor: true });
 
-        this.container.on('pointerdown', () => {
-            this.hide();
-        });
+        this.container.add([this.bg, this.nameText, this.dialogueText, this.continueText, this.hit]);
+        this.container.setSize(width, height);
+
+        this.hit.on('pointerdown', () => this.hide());
     }
 
     show(speakerName, text) {
-        this.nameText.setText(speakerName);
-        this.dialogueText.setText(text);
+        this.nameText.setText(speakerName || '');
+        this.dialogueText.setText('');
         this.container.setVisible(true);
         this.visible = true;
 
-        // Typewriter effect
-        this.scene.tweens.add({
-            targets: this.dialogueText,
-            duration: text.length * 20,
-            onUpdate: (tween) => {
-                const progress = tween.progress;
-                const chars = Math.floor(text.length * progress);
-                this.dialogueText.setText(text.substring(0, chars));
+        if (this._typing) {
+            this._typing.remove(false);
+            this._typing = null;
+        }
+
+        const full = String(text || '');
+        let i = 0;
+        this._typing = this.scene.time.addEvent({
+            delay: 18,
+            repeat: Math.max(0, full.length - 1),
+            callback: () => {
+                i++;
+                this.dialogueText.setText(full.substring(0, i));
             },
         });
     }
 
     hide() {
+        if (this._typing) {
+            this._typing.remove(false);
+            this._typing = null;
+        }
         this.container.setVisible(false);
         this.visible = false;
-        if (this.onClose) {
-            this.onClose();
-        }
+        if (this.onClose) this.onClose();
     }
 
     destroy() {
+        if (this._typing) this._typing.remove(false);
         this.container.destroy();
     }
 }

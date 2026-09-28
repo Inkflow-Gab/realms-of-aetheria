@@ -63,32 +63,31 @@ export class WorldScene extends Phaser.Scene {
         this.createWorld();
 
         // === PLAYER SPRITE ===
+        const gfx = SettingsSystem.getGraphicsProfile();
         this.playerSprite = this.add.sprite(
             this.player.x * GAME_CONFIG.TILE_SIZE,
             this.player.y * GAME_CONFIG.TILE_SIZE,
             `char_${this.player.avatarIndex}`
-        ).setScale(1.5).setDepth(10);
+        ).setScale(gfx.playerScale || 1.5).setDepth(10);
 
-        // === UI SETUP ===
+        // === CAMERA (zoom stays 1 — zoomed cameras break fixed HUD taps) ===
+        this.cameras.main.startFollow(this.playerSprite, true, 0.1, 0.1);
+        this.cameras.main.setZoom(1);
+        this.applyPlayerCosmetics();
+
+        // === UI SETUP (after camera so scrollFactor 0 binds correctly) ===
         this.createUI();
 
         // === MOBILE CONTROLS ===
-        const joyR = Math.max(50, Math.min(70, this.cameras.main.height * 0.14));
+        const joyR = Math.max(48, Math.min(64, this.cameras.main.height * 0.12));
         this.joystick = new VirtualJoystick(
             this,
-            Math.max(90, joyR + 30),
-            this.cameras.main.height - joyR - 24,
-            joyR * 1.6
+            Math.max(80, joyR + 28),
+            this.cameras.main.height - joyR - 20,
+            joyR * 1.5
         );
 
-        // Action buttons
         this.createActionButtons();
-
-        // === CAMERA ===
-        this.cameras.main.startFollow(this.playerSprite, true, 0.1, 0.1);
-        const gfx = SettingsSystem.getGraphicsProfile();
-        this.cameras.main.setZoom(gfx.cameraZoom);
-        this.applyPlayerCosmetics();
 
         // === SPAWN ENTITIES ===
         this.spawnNPCs();
@@ -285,26 +284,27 @@ export class WorldScene extends Phaser.Scene {
                 fontSize: L.font(12),
                 variant: btn.action === 'save' ? 'primary' : 'ghost',
                 bgColor: btn.action === 'save' ? 0x2a3a4a : undefined,
+                depth: 300,
             });
-            button.setScrollFactor(0).setDepth(100);
+            button.pinToHud();
         });
 
         // === BOTTOM-RIGHT: Action Buttons ===
         const atk = Math.max(58, L.font(64));
         this.attackBtn = UIComponents.createButton(this, width - L.pad - atk / 2, height - L.pad - atk / 2, 'ATK', () => {
             this.playerAttack();
-        }, { width: atk, height: atk, fontSize: L.font(16), bgColor: 0x8b0000, variant: 'danger' });
-        this.attackBtn.setScrollFactor(0).setDepth(100);
+        }, { width: atk, height: atk, fontSize: L.font(16), bgColor: 0x8b0000, variant: 'danger', depth: 300 });
+        this.attackBtn.pinToHud();
 
         this.skillBtn = UIComponents.createButton(this, width - L.pad - atk * 1.7, height - L.pad - atk * 0.55, 'Skill', () => {
             this.openSkillMenu();
-        }, { width: Math.max(56, L.font(60)), height: Math.max(42, L.font(44)), fontSize: L.font(13), bgColor: 0x2a2a6a });
-        this.skillBtn.setScrollFactor(0).setDepth(100);
+        }, { width: Math.max(56, L.font(60)), height: Math.max(42, L.font(44)), fontSize: L.font(13), bgColor: 0x2a2a6a, depth: 300 });
+        this.skillBtn.pinToHud();
 
         this.interactBtn = UIComponents.createButton(this, width - L.pad - atk / 2, height - L.pad - atk * 1.65, 'Talk', () => {
             this.interact();
-        }, { width: Math.max(56, L.font(60)), height: Math.max(42, L.font(44)), fontSize: L.font(13), bgColor: 0x2a4a2a, variant: 'primary' });
-        this.interactBtn.setScrollFactor(0).setDepth(100);
+        }, { width: Math.max(56, L.font(60)), height: Math.max(42, L.font(44)), fontSize: L.font(13), bgColor: 0x2a4a2a, variant: 'primary', depth: 300 });
+        this.interactBtn.pinToHud();
 
         // === MINIMAP ===
         const mmW = Math.min(140, width * 0.18);
